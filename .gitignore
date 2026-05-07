@@ -5,6 +5,10 @@ node_modules/
 dist/
 *.tar
 *.tgz
+bin/
+*.exe
+*.test
+coverage.out
 
 # Logs
 *.log
