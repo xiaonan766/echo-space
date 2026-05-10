@@ -15,6 +15,7 @@ import (
 type Config struct {
 	Server ServerConfig `yaml:"server"`
 	Redis  RedisConfig  `yaml:"redis"`
+	MySQL  MySQLConfig  `yaml:"mysql"`
 	Admin  AdminConfig  `yaml:"admin"`
 }
 
@@ -36,6 +37,22 @@ type RedisConfig struct {
 	Password string `yaml:"password"`
 	DB       int    `yaml:"db"`
 	PoolSize int    `yaml:"poolSize"`
+}
+
+type MySQLConfig struct {
+	DSN             string `yaml:"dsn"`
+	MaxIdleConns    int    `yaml:"maxIdleConns"`
+	MaxOpenConns    int    `yaml:"maxOpenConns"`
+	ConnMaxLifetime string `yaml:"connMaxLifetime"`
+	AutoMigrate     bool   `yaml:"autoMigrate"`
+}
+
+func (c MySQLConfig) ConnMaxLifetimeDuration() time.Duration {
+	duration, err := time.ParseDuration(c.ConnMaxLifetime)
+	if err != nil {
+		return time.Hour
+	}
+	return duration
 }
 
 type AdminConfig struct {
@@ -73,6 +90,13 @@ func defaultConfig() Config {
 			Password: "",
 			DB:       0,
 			PoolSize: 10,
+		},
+		MySQL: MySQLConfig{
+			DSN:             "root:root@tcp(localhost:3306)/echo_space?charset=utf8mb4&parseTime=True&loc=Local",
+			MaxIdleConns:    5,
+			MaxOpenConns:    20,
+			ConnMaxLifetime: "1h",
+			AutoMigrate:     false,
 		},
 		Admin: AdminConfig{
 			Account:  "admin",
@@ -126,6 +150,12 @@ func applyEnvOverrides(cfg *Config) {
 	cfg.Redis.DB = envInt("REDIS_DB", cfg.Redis.DB)
 	cfg.Redis.PoolSize = envInt("REDIS_POOL_SIZE", cfg.Redis.PoolSize)
 
+	cfg.MySQL.DSN = envString("MYSQL_DSN", cfg.MySQL.DSN)
+	cfg.MySQL.MaxIdleConns = envInt("MYSQL_MAX_IDLE_CONNS", cfg.MySQL.MaxIdleConns)
+	cfg.MySQL.MaxOpenConns = envInt("MYSQL_MAX_OPEN_CONNS", cfg.MySQL.MaxOpenConns)
+	cfg.MySQL.ConnMaxLifetime = envString("MYSQL_CONN_MAX_LIFETIME", cfg.MySQL.ConnMaxLifetime)
+	cfg.MySQL.AutoMigrate = envBool("MYSQL_AUTO_MIGRATE", cfg.MySQL.AutoMigrate)
+
 	cfg.Admin.Account = envString("ADMIN_ACCOUNT", cfg.Admin.Account)
 	cfg.Admin.Password = envString("ADMIN_PASSWORD", cfg.Admin.Password)
 	cfg.Admin.TokenTTL = envString("ADMIN_TOKEN_TTL", cfg.Admin.TokenTTL)
@@ -146,6 +176,19 @@ func envInt(key string, fallback int) int {
 	}
 
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}

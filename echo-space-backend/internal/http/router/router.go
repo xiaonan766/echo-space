@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/config"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/middleware"
@@ -12,6 +13,7 @@ import (
 type Dependencies struct {
 	Config config.Config
 	Redis  *redis.Client
+	DB     *gorm.DB
 }
 
 func New(deps Dependencies) *gin.Engine {

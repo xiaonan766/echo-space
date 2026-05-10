@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	adminhandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler/admin"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 	adminservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/admin"
 )
 
@@ -12,6 +13,9 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	accountService := adminservice.NewAccountService(deps.Redis, deps.Config.Admin)
 	accountHandler := adminhandler.NewAccountHandler(accountService)
 	indexHandler := adminhandler.NewIndexHandler()
+	categoryRepository := repository.NewCategoryRepository(deps.DB)
+	categoryService := adminservice.NewCategoryService(categoryRepository)
+	categoryHandler := adminhandler.NewCategoryHandler(categoryService)
 
 	group.GET("/health", healthHandler.Health)
 
@@ -25,4 +29,11 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	indexGroup.POST("/getActualTimeStatisticsInfo", indexHandler.GetActualTimeStatisticsInfo)
 	indexGroup.GET("/getWeekStatisticsInfo", indexHandler.GetWeekStatisticsInfo)
 	indexGroup.POST("/getWeekStatisticsInfo", indexHandler.GetWeekStatisticsInfo)
+
+	categoryGroup := group.Group("/category")
+	categoryGroup.GET("/loadCategory", categoryHandler.LoadCategory)
+	categoryGroup.POST("/loadCategory", categoryHandler.LoadCategory)
+	categoryGroup.POST("/saveCategory", categoryHandler.SaveCategory)
+	categoryGroup.POST("/delCategory", categoryHandler.DeleteCategory)
+	categoryGroup.POST("/changeSort", categoryHandler.ChangeSort)
 }
