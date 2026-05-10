@@ -3,6 +3,7 @@ import Request from "./Request";
 const server_web = "/web";
 const server_file = "/file";
 const server_interact = "/interact";
+const server_shop = server_web + "/shop";
 
 const Api = {
     //web
@@ -72,6 +73,10 @@ const Api = {
     getVideoRecommend: server_web + "/video/getVideoRecommend",
     //热门视频
     hotVideoList: server_web + "/video/loadHotVideoList",
+
+    //购物
+    loadShopRecommend: server_shop + "/loadRecommend",
+    loadShopList: server_shop + "/loadList",
 
     //播放历史
     playHisotry: server_web + "/history/loadHistory",

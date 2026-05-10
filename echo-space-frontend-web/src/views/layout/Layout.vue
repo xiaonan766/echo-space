@@ -34,6 +34,7 @@
     <div class="body-container" :style="{
         'max-width': proxy.bodyMaxWidth + 'px',
         'min-width': proxy.bodyMinWidth + 'px',
+        padding: isShopPage ? '0px' : null,
       }">
       <div class="category" v-show="navActionStore.showCategory">
         <Category :showType="0"></Category>
@@ -142,6 +143,10 @@ const backgroundImage = computed(() => {
   } else {
     return null
   }
+})
+
+const isShopPage = computed(() => {
+  return route.path.startsWith('/shop')
 })
 
 //热搜

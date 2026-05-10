@@ -27,7 +27,8 @@ instance.interceptors.request.use(
         return config;
     },
     (error) => {
-        if (error.config.showLoading && loading) {
+        const { showLoading } = error.config || {};
+        if (showLoading && loading) {
             loading.close();
         }
         Message.error("请求发送失败");
@@ -62,10 +63,11 @@ instance.interceptors.response.use(
         }
     },
     (error) => {
-        if (error.config.showLoading && loading) {
+        const { showLoading, showError = true } = error.config || {};
+        if (showLoading && loading) {
             loading.close();
         }
-        return Promise.reject({ showError: true, msg: "网络异常" })
+        return Promise.reject({ showError: showError, msg: "网络异常" })
     }
 );
 
