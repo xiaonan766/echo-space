@@ -1,0 +1,22 @@
+server:
+  host: ""
+  port: "7070"
+  mode: "debug"
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+  poolSize: 10
+
+mysql:
+  dsn: "root:root@tcp(localhost:3306)/echo_space?charset=utf8mb4&parseTime=True&loc=Local"
+  maxIdleConns: 5
+  maxOpenConns: 20
+  connMaxLifetime: "1h"
+  autoMigrate: false
+
+admin:
+  account: "admin"
+  password: "admin123"
+  tokenTTL: "24h"
