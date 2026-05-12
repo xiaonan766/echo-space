@@ -9,6 +9,7 @@
       :padding="0"
       :draggable="false"
       :top="100"
+      dialogClass="login-dialog"
     >
       <div class="dialog-panel">
         <div class="bg">
@@ -271,51 +272,375 @@ onMounted(() => {
 </script>
 
 <style lang="scss">
-.dialog-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  .bg {
-    width: 450px;
-    height: 580px;
+.cust-dialog.login-dialog {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 70px rgba(60, 72, 100, 0.22);
+  animation: loginDialogIn 0.38s ease-out both;
+
+  .el-dialog__header {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 6;
+    padding: 16px;
+  }
+
+  .el-dialog__body {
+    padding: 0;
+  }
+
+  .dialog-body {
     overflow: hidden;
-    img {
-      width: 100%;
+  }
+}
+
+.login-dialog {
+  .dialog-panel {
+    position: relative;
+    display: grid;
+    grid-template-columns: 500px 1fr;
+    align-items: center;
+    min-height: 580px;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 76% 18%, rgba(255, 123, 179, 0.18), transparent 25%),
+      radial-gradient(circle at 82% 78%, rgba(97, 191, 255, 0.16), transparent 24%),
+      linear-gradient(120deg, #fff 0%, #fff 52%, #fbfdff 100%);
+
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    &::before {
+      right: 70px;
+      top: 78px;
+      width: 170px;
+      height: 170px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 126, 178, 0.26), transparent 68%);
+      filter: blur(2px);
+      animation: formGlowFloat 7s ease-in-out infinite;
+    }
+
+    &::after {
+      right: 40px;
+      bottom: 55px;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(90, 188, 255, 0.16), transparent 70%);
+      animation: formGlowFloat 8s ease-in-out -2s infinite;
     }
   }
+
+  .bg {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 580px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #eef9f6;
+
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    &::before {
+      opacity: 0.76;
+      background:
+        radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.72) 0 3px, transparent 4px),
+        radial-gradient(circle at 80% 26%, rgba(255, 136, 188, 0.28) 0 8px, transparent 9px),
+        radial-gradient(circle at 26% 78%, rgba(96, 190, 255, 0.24) 0 10px, transparent 11px),
+        radial-gradient(circle at 74% 72%, rgba(255, 222, 114, 0.25) 0 7px, transparent 8px);
+      background-size: 130px 150px, 190px 170px, 230px 210px, 160px 180px;
+      animation: animeLightMove 14s linear infinite;
+    }
+
+    &::after {
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, 0.28) 100%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(76, 150, 180, 0.12));
+      mix-blend-mode: screen;
+    }
+
+    img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      object-position: center;
+      transform-origin: center;
+      animation: animeImageFloat 8s ease-in-out infinite;
+      will-change: transform;
+    }
+  }
+
   .login-register {
+    position: relative;
+    z-index: 2;
     width: 350px;
+    justify-self: center;
+    padding: 34px 0;
+    animation: formSlideIn 0.5s ease-out 0.08s both;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -34px -42px;
+      z-index: -1;
+      border-radius: 24px;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.36)),
+        radial-gradient(circle at 12% 12%, rgba(255, 135, 188, 0.14), transparent 30%),
+        radial-gradient(circle at 90% 85%, rgba(80, 183, 255, 0.14), transparent 34%);
+      filter: drop-shadow(0 18px 35px rgba(64, 158, 255, 0.08));
+    }
+
     .tab-panel {
-      margin: 10px auto;
+      margin: 10px auto 22px;
       display: flex;
-      width: 130px;
+      width: 140px;
       font-size: 18px;
       align-items: center;
       justify-content: space-around;
       cursor: pointer;
+
       .active {
+        position: relative;
         color: var(--blue2);
+        font-weight: 600;
+
+        &::after {
+          content: "";
+          position: absolute;
+          left: 50%;
+          bottom: -8px;
+          width: 22px;
+          height: 3px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #67b8ff, #ff78b1);
+          transform: translateX(-50%);
+        }
       }
     }
+
+    .el-form-item {
+      animation: formItemIn 0.42s ease-out both;
+    }
+
+    .el-input__wrapper {
+      border-radius: 8px;
+      transition:
+        box-shadow 0.2s ease,
+        transform 0.2s ease,
+        border-color 0.2s ease;
+    }
+
+    .el-input__wrapper:hover,
+    .el-input__wrapper.is-focus {
+      transform: translateY(-1px);
+      box-shadow:
+        0 0 0 1px rgba(97, 179, 255, 0.26) inset,
+        0 8px 22px rgba(79, 163, 255, 0.13);
+    }
+
+    .iconfont {
+      color: #9aa7b8;
+      transition: color 0.2s ease;
+    }
+
+    .el-input__wrapper:hover .iconfont,
+    .el-input__wrapper.is-focus .iconfont {
+      color: #5aaeff;
+    }
+
     .no-account {
       width: 100%;
       display: flex;
       justify-content: space-between;
     }
+
     .login-btn {
+      position: relative;
       width: 100%;
+      overflow: hidden;
+      border: 0;
+      color: #fff;
+      background: linear-gradient(90deg, #58aaff 0%, #7b9dff 48%, #ff7aae 100%);
+      box-shadow: 0 10px 24px rgba(82, 154, 255, 0.24);
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        filter 0.2s ease;
+
+      &::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -70%;
+        width: 46%;
+        height: 100%;
+        background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+        transform: skewX(-24deg);
+      }
+
+      &:hover {
+        transform: translateY(-2px);
+        filter: saturate(1.06);
+        box-shadow: 0 14px 30px rgba(82, 154, 255, 0.32);
+
+        &::before {
+          animation: buttonShine 0.78s ease;
+        }
+      }
     }
+
     .bottom-btn {
       margin-bottom: 0px;
     }
   }
+
+  .check-code-panel {
+    display: flex;
+    width: 100%;
+
+    .el-input {
+      flex: 1;
+    }
+
+    .check-code {
+      width: 122px;
+      height: 40px;
+      margin-left: 8px;
+      cursor: pointer;
+      object-fit: cover;
+      border-radius: 6px;
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+
+      &:hover {
+        transform: translateY(-1px) scale(1.03) rotate(-1deg);
+        box-shadow: 0 8px 18px rgba(80, 160, 255, 0.18);
+      }
+    }
+  }
 }
 
-.check-code-panel {
-  display: flex;
-  .check-code {
-    margin-left: 5px;
-    cursor: pointer;
+@keyframes loginDialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes animeImageFloat {
+  0%,
+  100% {
+    transform: scale(1.04) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.08) translate3d(-8px, -6px, 0);
+  }
+}
+
+@keyframes animeLightMove {
+  from {
+    background-position: 0 0, 0 0, 0 0, 0 0;
+  }
+  to {
+    background-position: 130px 150px, -190px 170px, 230px -210px, -160px -180px;
+  }
+}
+
+@keyframes formSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes formItemIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes formGlowFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(10px, -8px, 0) scale(1.06);
+  }
+}
+
+@keyframes buttonShine {
+  from {
+    left: -70%;
+  }
+  to {
+    left: 120%;
+  }
+}
+
+@media (max-width: 900px) {
+  .cust-dialog.login-dialog {
+    width: calc(100vw - 32px) !important;
+  }
+
+  .login-dialog {
+    .dialog-panel {
+      grid-template-columns: 1fr;
+      min-height: auto;
+    }
+
+    .bg {
+      display: none;
+    }
+
+    .login-register {
+      width: min(350px, calc(100vw - 80px));
+      padding: 54px 0 42px;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cust-dialog.login-dialog,
+  .login-dialog .bg::before,
+  .login-dialog .bg img,
+  .login-dialog .dialog-panel::before,
+  .login-dialog .dialog-panel::after,
+  .login-dialog .login-register,
+  .login-dialog .login-register .el-form-item {
+    animation: none;
   }
 }
 </style>
