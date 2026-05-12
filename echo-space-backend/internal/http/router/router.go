@@ -30,6 +30,7 @@ func New(deps Dependencies) *gin.Engine {
 	})
 
 	registerAdminRoutes(engine.Group("/admin"), deps)
+	registerWebRoutes(engine.Group("/web"), deps)
 
 	return engine
 }
