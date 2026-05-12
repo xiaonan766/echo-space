@@ -10,10 +10,10 @@ import (
 
 func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	healthHandler := adminhandler.NewHealthHandler(deps.Redis)
-	accountService := adminservice.NewAccountService(deps.Redis, deps.Config.Admin)
+	accountService := adminservice.NewAccountService(deps.Cache, deps.Config.Admin)
 	accountHandler := adminhandler.NewAccountHandler(accountService)
 	indexHandler := adminhandler.NewIndexHandler()
-	settingService := adminservice.NewSettingService(deps.Redis)
+	settingService := adminservice.NewSettingService(deps.Cache)
 	settingHandler := adminhandler.NewSettingHandler(settingService)
 	categoryRepository := repository.NewCategoryRepository(deps.DB)
 	categoryService := adminservice.NewCategoryService(categoryRepository)

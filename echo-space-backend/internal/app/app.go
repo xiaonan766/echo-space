@@ -18,6 +18,7 @@ import (
 type App struct {
 	cfg    config.Config
 	redis  *redis.Client
+	cache  *cache.HybridCache
 	db     *gorm.DB
 	router http.Handler
 }
@@ -27,15 +28,18 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	hybridCache := cache.NewHybridCache(redisClient)
 
 	mysqlDB, err := database.NewMySQLClient(ctx, cfg.MySQL)
 	if err != nil {
+		hybridCache.Close()
 		_ = redisClient.Close()
 		return nil, err
 	}
 
 	if cfg.MySQL.AutoMigrate {
 		if err := mysqlDB.AutoMigrate(&domain.CategoryInfo{}); err != nil {
+			hybridCache.Close()
 			_ = redisClient.Close()
 			closeDB(mysqlDB)
 			return nil, fmt.Errorf("auto migrate mysql: %w", err)
@@ -45,12 +49,14 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	router := approuter.New(approuter.Dependencies{
 		Config: cfg,
 		Redis:  redisClient,
+		Cache:  hybridCache,
 		DB:     mysqlDB,
 	})
 
 	return &App{
 		cfg:    cfg,
 		redis:  redisClient,
+		cache:  hybridCache,
 		db:     mysqlDB,
 		router: router,
 	}, nil
@@ -61,6 +67,9 @@ func (a *App) Router() http.Handler {
 }
 
 func (a *App) Close() {
+	if a.cache != nil {
+		a.cache.Close()
+	}
 	if a.redis != nil {
 		_ = a.redis.Close()
 	}

@@ -4,21 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 type TokenStore struct {
-	client    *redis.Client
+	cache     *HybridCache
 	keyPrefix string
-	timeout   time.Duration
 }
 
-func NewTokenStore(client *redis.Client, keyPrefix string) *TokenStore {
+func NewTokenStore(cache *HybridCache, keyPrefix string) *TokenStore {
 	return &TokenStore{
-		client:    client,
+		cache:     cache,
 		keyPrefix: keyPrefix,
-		timeout:   3 * time.Second,
 	}
 }
 
@@ -28,17 +24,11 @@ func (s *TokenStore) Set(ctx context.Context, token string, value any, expiratio
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
-
-	return s.client.Set(ctx, s.key(token), content, expiration).Err()
+	return s.cache.Set(ctx, s.key(token), content, expiration, RecoverWriteBack)
 }
 
 func (s *TokenStore) Delete(ctx context.Context, token string) error {
-	ctx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
-
-	return s.client.Del(ctx, s.key(token)).Err()
+	return s.cache.Delete(ctx, s.key(token), RecoverWriteBack)
 }
 
 func (s *TokenStore) key(token string) string {

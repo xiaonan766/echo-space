@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/mojocn/base64Captcha"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
@@ -53,8 +52,8 @@ type RegisterInput struct {
 	CheckCode        string
 }
 
-func NewAccountService(redisClient *redis.Client, userRepository *repository.UserRepository) *AccountService {
-	store := cache.NewCaptchaStore(redisClient, checkCodeKeyPrefix, checkCodeTTL)
+func NewAccountService(hybridCache *cache.HybridCache, userRepository *repository.UserRepository) *AccountService {
+	store := cache.NewCaptchaStore(hybridCache, checkCodeKeyPrefix, checkCodeTTL)
 	driver := base64Captcha.NewDriverMath(
 		42,
 		100,

@@ -2,7 +2,7 @@ package cache
 
 import (
 	"context"
-	"fmt"
+	"log"
 
 	"github.com/redis/go-redis/v9"
 
@@ -18,8 +18,7 @@ func NewRedisClient(ctx context.Context, cfg config.RedisConfig) (*redis.Client,
 	})
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("connect redis %s: %w", cfg.Addr, err)
+		log.Printf("redis initial ping failed, local cache fallback is enabled: %v", err)
 	}
 
 	return client, nil

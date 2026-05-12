@@ -3,8 +3,6 @@ package admin
 import (
 	"context"
 
-	"github.com/redis/go-redis/v9"
-
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 )
@@ -15,9 +13,9 @@ type SettingService struct {
 	settingStore *cache.SysSettingStore
 }
 
-func NewSettingService(redisClient *redis.Client) *SettingService {
+func NewSettingService(hybridCache *cache.HybridCache) *SettingService {
 	return &SettingService{
-		settingStore: cache.NewSysSettingStore(redisClient, sysSettingKey),
+		settingStore: cache.NewSysSettingStore(hybridCache, sysSettingKey),
 	}
 }
 

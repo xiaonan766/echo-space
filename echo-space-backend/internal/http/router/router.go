@@ -8,11 +8,13 @@ import (
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/config"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/middleware"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/response"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 )
 
 type Dependencies struct {
 	Config config.Config
 	Redis  *redis.Client
+	Cache  *cache.HybridCache
 	DB     *gorm.DB
 }
 

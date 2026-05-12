@@ -10,7 +10,7 @@ import (
 
 func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	userRepository := repository.NewUserRepository(deps.DB)
-	accountService := webservice.NewAccountService(deps.Redis, userRepository)
+	accountService := webservice.NewAccountService(deps.Cache, userRepository)
 	accountHandler := webhandler.NewAccountHandler(accountService)
 
 	categoryRepository := repository.NewCategoryRepository(deps.DB)

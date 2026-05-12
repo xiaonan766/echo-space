@@ -4,48 +4,38 @@ import (
 	"context"
 	"strings"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 type CaptchaStore struct {
-	client     *redis.Client
+	cache      *HybridCache
 	keyPrefix  string
 	expiration time.Duration
-	timeout    time.Duration
 }
 
-func NewCaptchaStore(client *redis.Client, keyPrefix string, expiration time.Duration) *CaptchaStore {
+func NewCaptchaStore(cache *HybridCache, keyPrefix string, expiration time.Duration) *CaptchaStore {
 	return &CaptchaStore{
-		client:     client,
+		cache:      cache,
 		keyPrefix:  keyPrefix,
 		expiration: expiration,
-		timeout:    3 * time.Second,
 	}
 }
 
 func (s *CaptchaStore) Set(id string, value string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
-	defer cancel()
-
-	return s.client.Set(ctx, s.key(id), value, s.expiration).Err()
+	return s.cache.Set(context.Background(), s.key(id), []byte(value), s.expiration, RecoverNone)
 }
 
 func (s *CaptchaStore) Get(id string, clear bool) string {
-	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
-	defer cancel()
-
 	key := s.key(id)
-	value, err := s.client.Get(ctx, key).Result()
-	if err != nil {
+	value, ok, err := s.cache.Get(context.Background(), key, s.expiration, true)
+	if err != nil || !ok {
 		return ""
 	}
 
 	if clear {
-		_ = s.client.Del(ctx, key).Err()
+		_ = s.cache.Delete(context.Background(), key, RecoverNone)
 	}
 
-	return value
+	return string(value)
 }
 
 func (s *CaptchaStore) Verify(id string, answer string, clear bool) bool {

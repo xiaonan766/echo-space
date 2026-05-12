@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/mojocn/base64Captcha"
-	"github.com/redis/go-redis/v9"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/config"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
@@ -64,8 +63,8 @@ func (e *BusinessError) Error() string {
 	return e.Info
 }
 
-func NewAccountService(redisClient *redis.Client, adminConfig config.AdminConfig) *AccountService {
-	store := cache.NewCaptchaStore(redisClient, checkCodeKeyPrefix, checkCodeTTL)
+func NewAccountService(hybridCache *cache.HybridCache, adminConfig config.AdminConfig) *AccountService {
+	store := cache.NewCaptchaStore(hybridCache, checkCodeKeyPrefix, checkCodeTTL)
 	driver := base64Captcha.NewDriverMath(
 		42,
 		100,
@@ -79,7 +78,7 @@ func NewAccountService(redisClient *redis.Client, adminConfig config.AdminConfig
 	return &AccountService{
 		adminConfig: adminConfig,
 		captcha:     base64Captcha.NewCaptcha(driver, store),
-		tokenStore:  cache.NewTokenStore(redisClient, adminTokenKeyPrefix),
+		tokenStore:  cache.NewTokenStore(hybridCache, adminTokenKeyPrefix),
 	}
 }
 
