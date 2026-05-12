@@ -4,36 +4,49 @@
       <el-form :model="searchForm" @submit.prevent>
         <el-row :gutter="10">
           <el-col :span="5">
-            <!--input输入-->
             <el-form-item label="视频">
-              <el-input clearable placeholder="输入视频名称搜索" v-model="searchForm.videoNameFuzzy"></el-input>
+              <el-input
+                v-model="searchForm.videoNameFuzzy"
+                clearable
+                placeholder="输入视频名称搜索"
+                @keyup.enter="handleSearch"
+              ></el-input>
             </el-form-item>
           </el-col>
           <el-col :span="5">
-            <el-button type="primary" @click="loadDataList">搜索</el-button>
+            <el-button type="primary" @click="handleSearch">搜索</el-button>
           </el-col>
         </el-row>
       </el-form>
     </el-card>
   </div>
   <el-card class="table-data-card">
-    <Table ref="tableInfoRef" :columns="columns" :fetch="loadDataList" :dataSource="tableData" :options="tableOptions"
-      :extHeight="tableOptions.extHeight">
-
-      <template #slotNickName="{index,row}">
-        <a target="_blank" class="nick-name" :href="`${proxy.webDomain}/user/${row.userId}`">{{row.nickName}}</a>
+    <Table
+      ref="tableInfoRef"
+      :columns="columns"
+      :fetch="loadDataList"
+      :dataSource="tableData"
+      :options="tableOptions"
+      :extHeight="tableOptions.extHeight"
+    >
+      <template #slotNickName="{ row }">
+        <a target="_blank" class="nick-name" :href="`${proxy.webDomain}/user/${row.userId}`">
+          {{ row.nickName || '未知用户' }}
+        </a>
       </template>
-      <template #time="{ index, row }">
-        {{proxy.Utils.convertSecondsToHMS(Math.round(row.time))}}
+      <template #time="{ row }">
+        {{ proxy.Utils.convertSecondsToHMS(Math.round(row.time || 0)) }}
       </template>
 
-      <template #slotOperation="{ index, row }">
+      <template #slotOperation="{ row }">
         <a href="javascript:void(0)" class="a-link" @click="delDanmu(row.danmuId)">删除</a>
       </template>
 
-      <template #slotText="{index,row}">
-        <div>{{row.text}}</div>
-        <a target="_blank" class="video-info" :href="`${proxy.webDomain}/video/${row.videoId}`">视频：{{row.videoName}}</a>
+      <template #slotText="{ row }">
+        <div class="danmu-text">{{ row.text }}</div>
+        <a target="_blank" class="video-info" :href="`${proxy.webDomain}/video/${row.videoId}`">
+          视频：{{ row.videoName || '视频不存在' }}
+        </a>
       </template>
     </Table>
   </el-card>
@@ -41,10 +54,9 @@
 
 <script setup>
 import Table from '@/components/Table.vue'
-import { ref, reactive, getCurrentInstance, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, getCurrentInstance } from 'vue'
+
 const { proxy } = getCurrentInstance()
-const router = useRouter()
 
 const columns = [
   {
@@ -100,9 +112,14 @@ const loadDataList = async () => {
   Object.assign(tableData.value, result.data)
 }
 
+const handleSearch = () => {
+  tableData.value.pageNo = 1
+  loadDataList()
+}
+
 const delDanmu = (danmuId) => {
   proxy.Confirm({
-    message: '确定要删除吗？',
+    message: '确定要删除这条弹幕吗？',
     okfun: async () => {
       let result = await proxy.Request({
         url: proxy.Api.delDanmu,
@@ -131,5 +148,9 @@ const delDanmu = (danmuId) => {
 .nick-name {
   font-size: 14px;
   color: var(--text2);
+}
+.danmu-text {
+  line-height: 20px;
+  word-break: break-all;
 }
 </style>

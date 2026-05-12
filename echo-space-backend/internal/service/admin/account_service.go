@@ -49,7 +49,7 @@ type LoginResult struct {
 	Token   string
 }
 
-type tokenInfo struct {
+type TokenInfo struct {
 	Account string `json:"account"`
 	LoginIP string `json:"loginIp"`
 	LoginAt string `json:"loginAt"`
@@ -114,7 +114,7 @@ func (s *AccountService) Login(ctx context.Context, input LoginInput) (*LoginRes
 		return nil, fmt.Errorf("generate admin token: %w", err)
 	}
 
-	info := tokenInfo{
+	info := TokenInfo{
 		Account: input.Account,
 		LoginIP: input.LoginIP,
 		LoginAt: time.Now().Format(time.RFC3339),
@@ -127,6 +127,20 @@ func (s *AccountService) Login(ctx context.Context, input LoginInput) (*LoginRes
 		Account: input.Account,
 		Token:   token,
 	}, nil
+}
+
+func (s *AccountService) GetTokenInfo(ctx context.Context, token string) (*TokenInfo, bool, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, false, nil
+	}
+
+	var info TokenInfo
+	ok, err := s.tokenStore.Get(ctx, token, &info, s.adminConfig.TokenTTLDuration())
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	return &info, true, nil
 }
 
 func IsBusinessError(err error) (*BusinessError, bool) {

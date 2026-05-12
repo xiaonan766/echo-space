@@ -24,6 +24,9 @@ import (
 const (
 	checkCodeKeyPrefix     = "echo-space:check_code:web:"
 	checkCodeTTL           = 5 * time.Minute
+	webTokenKeyPrefix      = "echo-space:token:web:"
+	webTokenTTL            = 24 * time.Hour
+	WebTokenCookieName     = "token"
 	defaultRegisterCoinCnt = 0
 	userStatusEnable       = 1
 	userSexSecrecy         = 2
@@ -36,6 +39,7 @@ var (
 
 type AccountService struct {
 	captcha        *base64Captcha.Captcha
+	tokenStore     *cache.TokenStore
 	userRepository *repository.UserRepository
 }
 
@@ -52,6 +56,25 @@ type RegisterInput struct {
 	CheckCode        string
 }
 
+type LoginInput struct {
+	Email        string
+	Password     string
+	CheckCodeKey string
+	CheckCode    string
+	OldToken     string
+	LoginIP      string
+}
+
+type TokenUserInfo struct {
+	Token            string `json:"token"`
+	UserID           string `json:"userId"`
+	NickName         string `json:"nickName"`
+	Avatar           string `json:"avatar"`
+	Sex              int    `json:"sex"`
+	Theme            int    `json:"theme"`
+	CurrentCoinCount int    `json:"currentCoinCount"`
+}
+
 func NewAccountService(hybridCache *cache.HybridCache, userRepository *repository.UserRepository) *AccountService {
 	store := cache.NewCaptchaStore(hybridCache, checkCodeKeyPrefix, checkCodeTTL)
 	driver := base64Captcha.NewDriverMath(
@@ -66,6 +89,7 @@ func NewAccountService(hybridCache *cache.HybridCache, userRepository *repositor
 
 	return &AccountService{
 		captcha:        base64Captcha.NewCaptcha(driver, store),
+		tokenStore:     cache.NewTokenStore(hybridCache, webTokenKeyPrefix),
 		userRepository: userRepository,
 	}
 }
@@ -129,6 +153,87 @@ func (s *AccountService) Register(ctx context.Context, input RegisterInput) erro
 	}
 
 	return nil
+}
+
+func (s *AccountService) Login(ctx context.Context, input LoginInput) (*TokenUserInfo, error) {
+	input.Email = strings.TrimSpace(input.Email)
+	input.Password = strings.TrimSpace(input.Password)
+	input.LoginIP = normalizeLoginIP(input.LoginIP)
+
+	if strings.TrimSpace(input.OldToken) != "" {
+		defer func() {
+			_ = s.tokenStore.Delete(context.Background(), input.OldToken)
+		}()
+	}
+
+	if !s.captcha.Verify(input.CheckCodeKey, input.CheckCode, true) {
+		return nil, &BusinessError{Info: "\u56fe\u7247\u9a8c\u8bc1\u7801\u4e0d\u6b63\u786e"}
+	}
+	if input.Email == "" || !emailRegexp.MatchString(input.Email) || input.Password == "" {
+		return nil, &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
+	}
+
+	user, err := s.userRepository.FindByEmail(ctx, input.Email)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, &BusinessError{Info: "\u8d26\u53f7\u6216\u5bc6\u7801\u9519\u8bef"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(user.Password, input.Password) {
+		return nil, &BusinessError{Info: "\u8d26\u53f7\u6216\u5bc6\u7801\u9519\u8bef"}
+	}
+	if user.Status == 0 {
+		return nil, &BusinessError{Info: "\u8d26\u53f7\u5df2\u7981\u7528"}
+	}
+
+	token, err := randomHexToken()
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	if err := s.userRepository.UpdateLoginInfo(ctx, user.UserID, now, input.LoginIP); err != nil {
+		return nil, err
+	}
+
+	result := &TokenUserInfo{
+		Token:            token,
+		UserID:           user.UserID,
+		NickName:         user.NickName,
+		Avatar:           user.Avatar,
+		Sex:              user.Sex,
+		Theme:            user.Theme,
+		CurrentCoinCount: user.CurrentCoinCount,
+	}
+	if err := s.tokenStore.Set(ctx, token, result, webTokenTTL); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s *AccountService) Logout(ctx context.Context, token string) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil
+	}
+
+	return s.tokenStore.Delete(ctx, token)
+}
+
+func (s *AccountService) GetTokenUserInfo(ctx context.Context, token string) (*TokenUserInfo, bool, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, false, nil
+	}
+
+	var info TokenUserInfo
+	ok, err := s.tokenStore.Get(ctx, token, &info, webTokenTTL)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	return &info, true, nil
 }
 
 func validateRegisterInput(input RegisterInput) error {
@@ -202,4 +307,20 @@ func randomNumberString(length int) (string, error) {
 func md5Hex(value string) string {
 	sum := md5.Sum([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func randomHexToken() (string, error) {
+	buffer := make([]byte, 32)
+	if _, err := rand.Read(buffer); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buffer), nil
+}
+
+func normalizeLoginIP(ip string) string {
+	ip = strings.TrimSpace(ip)
+	if len(ip) <= 15 {
+		return ip
+	}
+	return ip[:15]
 }

@@ -4,51 +4,66 @@
       <el-form :model="searchForm" @submit.prevent>
         <el-row :gutter="10">
           <el-col :span="5">
-            <!--input输入-->
             <el-form-item label="视频">
-              <el-input clearable placeholder="输入视频名称搜索" v-model="searchForm.videoNameFuzzy"></el-input>
+              <el-input
+                v-model="searchForm.videoNameFuzzy"
+                clearable
+                placeholder="输入视频名称搜索"
+                @keyup.enter="handleSearch"
+              ></el-input>
             </el-form-item>
           </el-col>
           <el-col :span="5">
-            <el-button type="success" @click="loadDataList">搜索</el-button>
+            <el-button type="success" @click="handleSearch">搜索</el-button>
           </el-col>
         </el-row>
       </el-form>
     </el-card>
   </div>
   <el-card class="table-data-card">
-    <Table ref="tableInfoRef" :columns="columns" :fetch="loadDataList" :dataSource="tableData" :options="tableOptions"
-      :extHeight="tableOptions.extHeight">
-      <template #slotComment="{ index, row }">
+    <Table
+      ref="tableInfoRef"
+      :columns="columns"
+      :fetch="loadDataList"
+      :dataSource="tableData"
+      :options="tableOptions"
+      :extHeight="tableOptions.extHeight"
+    >
+      <template #slotComment="{ row }">
         <div class="comment-info">
           <a class="a-link nick-name" :href="`${proxy.webDomain}/user/${row.userId}`" target="_blank">
             <Avatar :avatar="row.avatar"></Avatar>
           </a>
           <div class="comment">
             <div>
-              <a class="a-link nick-name" :href="`${proxy.webDomain}/user/${row.userId}`"
-                target="_blank">{{ row.nickName }}
+              <a class="a-link nick-name" :href="`${proxy.webDomain}/user/${row.userId}`" target="_blank">
+                {{ row.nickName || '未知用户' }}
               </a>
               <template v-if="row.replyUserId">
                 回复@
-                <a class="a-link nick-name" :href="`${proxy.webDomain}/user/${row.replyUserId}`"
-                  target="_blank">{{ row.replyNickName }} </a>的评论
+                <a class="a-link nick-name" :href="`${proxy.webDomain}/user/${row.replyUserId}`" target="_blank">
+                  {{ row.replyNickName || '未知用户' }}
+                </a>
+                的评论
               </template>
             </div>
 
             <div class="content">{{ row.content }}</div>
+            <div v-if="row.imgPath" class="image-show">
+              <Cover :source="row.imgPath + proxy.imageThumbnailSuffix" :preview="true" fit="cover"></Cover>
+            </div>
             <div class="time-info">
               <div class="time">{{ row.postTime }}</div>
-              <div class="iconfont icon-delete" @click="delComment(row.commentId)"></div>
+              <div class="iconfont icon-delete" title="删除评论" @click="delComment(row.commentId)"></div>
             </div>
           </div>
         </div>
       </template>
 
-      <template #slotVideo="{ index, row }">
+      <template #slotVideo="{ row }">
         <a :href="`${proxy.webDomain}/video/${row.videoId}`" target="_blank" class="a-link">
           <Cover :source="row.videoCover"></Cover>
-          <div class="video-name">{{ row.videoName }}</div>
+          <div class="video-name">{{ row.videoName || '视频不存在' }}</div>
         </a>
       </template>
     </Table>
@@ -57,10 +72,9 @@
 
 <script setup>
 import Table from '@/components/Table.vue'
-import { ref, reactive, getCurrentInstance, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, getCurrentInstance } from 'vue'
+
 const { proxy } = getCurrentInstance()
-const router = useRouter()
 
 const columns = [
   {
@@ -98,9 +112,14 @@ const loadDataList = async () => {
   Object.assign(tableData.value, result.data)
 }
 
+const handleSearch = () => {
+  tableData.value.pageNo = 1
+  loadDataList()
+}
+
 const delComment = (commentId) => {
   proxy.Confirm({
-    message: '确定要删除吗？',
+    message: '确定要删除这条评论吗？',
     okfun: async () => {
       let result = await proxy.Request({
         url: proxy.Api.delComment,
@@ -124,13 +143,23 @@ const delComment = (commentId) => {
   .comment {
     margin-left: 10px;
   }
+  .content {
+    margin: 5px 0;
+    color: var(--text2);
+    line-height: 20px;
+    word-break: break-all;
+  }
   .time-info {
     display: flex;
     font-size: 12px;
+    color: var(--text3);
     .iconfont {
       margin-left: 5px;
       font-size: 13px;
       cursor: pointer;
+      &:hover {
+        color: #f56c6c;
+      }
     }
   }
 }
@@ -143,5 +172,11 @@ const delComment = (commentId) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   width: 100%;
+}
+.image-show {
+  width: 100px;
+  height: 100px;
+  overflow: hidden;
+  margin: 5px 0;
 }
 </style>

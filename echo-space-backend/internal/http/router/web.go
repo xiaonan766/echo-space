@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	webhandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler/web"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/middleware"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 	webservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/web"
 )
@@ -21,6 +22,8 @@ func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	accountGroup.GET("/checkCode", accountHandler.CheckCode)
 	accountGroup.POST("/checkCode", accountHandler.CheckCode)
 	accountGroup.POST("/register", accountHandler.Register)
+	accountGroup.POST("/login", accountHandler.Login)
+	accountGroup.POST("/logout", middleware.WebAuth(accountService), accountHandler.Logout)
 
 	categoryGroup := group.Group("/category")
 	categoryGroup.GET("/loadAllCategory", categoryHandler.LoadAllCategory)

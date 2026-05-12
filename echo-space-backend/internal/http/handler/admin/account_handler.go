@@ -64,6 +64,6 @@ func (h *AccountHandler) Login(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie(adminservice.AdminTokenCookieName, result.Token, -1, "/", "", false, false)
+	c.SetCookie(adminservice.AdminTokenCookieName, result.Token, 0, "/", "", false, false)
 	response.Success(c, result.Account)
 }

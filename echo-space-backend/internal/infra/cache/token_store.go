@@ -27,6 +27,18 @@ func (s *TokenStore) Set(ctx context.Context, token string, value any, expiratio
 	return s.cache.Set(ctx, s.key(token), content, expiration, RecoverWriteBack)
 }
 
+func (s *TokenStore) Get(ctx context.Context, token string, dest any, localTTL time.Duration) (bool, error) {
+	content, ok, err := s.cache.Get(ctx, s.key(token), localTTL, true)
+	if err != nil || !ok {
+		return ok, err
+	}
+
+	if err := json.Unmarshal(content, dest); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *TokenStore) Delete(ctx context.Context, token string) error {
 	return s.cache.Delete(ctx, s.key(token), RecoverWriteBack)
 }

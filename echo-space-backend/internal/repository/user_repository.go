@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -87,6 +88,16 @@ func (r *UserRepository) UpdateStatus(ctx context.Context, userID string, status
 		Where("user_id = ?", userID).
 		Update("status", status)
 	return result.RowsAffected, result.Error
+}
+
+func (r *UserRepository) UpdateLoginInfo(ctx context.Context, userID string, loginTime time.Time, loginIP string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.UserInfo{}).
+		Where("user_id = ?", userID).
+		Updates(map[string]any{
+			"last_login_time": loginTime,
+			"last_login_ip":   loginIP,
+		}).Error
 }
 
 func (r *UserRepository) applyListQuery(db *gorm.DB, query UserListQuery) *gorm.DB {
