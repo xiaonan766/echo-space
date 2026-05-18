@@ -21,6 +21,11 @@ const Api = {
     //弹幕
     loadDanmu: "/interact/loadDanmu",
     delDanmu: "/interact/delDanmu",
+    //商城周边
+    loadPeripheral: "/shop/peripheral/loadPeripheral",
+    getPeripheral: "/shop/peripheral/getPeripheral",
+    savePeripheral: "/shop/peripheral/savePeripheral",
+    changePeripheralStatus: "/shop/peripheral/changeStatus",
     //用户管理
     loadUser: "/user/loadUser",
     changeStatus: "/user/changeStatus",

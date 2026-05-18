@@ -20,3 +20,7 @@ admin:
   account: "admin"
   password: "admin123"
   tokenTTL: "24h"
+
+file:
+  resourceRoot: "resources"
+  maxImageMB: 10

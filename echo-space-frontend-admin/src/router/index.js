@@ -33,6 +33,10 @@ const router = createRouter({
         name: '弹幕管理',
         component: () => import('@/views/interact/DanmuList.vue'),
       }, {
+        path: '/shop/peripheral',
+        name: '周边管理',
+        component: () => import('@/views/shop/PeripheralList.vue'),
+      }, {
         path: '/user/userList',
         name: '用户管理',
         component: () => import('@/views/user/UserList.vue'),

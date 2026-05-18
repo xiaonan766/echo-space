@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/config"
+	filehandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/middleware"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/response"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
@@ -30,6 +31,10 @@ func New(deps Dependencies) *gin.Engine {
 			"service": "echo-space-backend",
 		})
 	})
+
+	fileHandler := filehandler.NewFileHandler(deps.Config.File)
+	fileGroup := engine.Group("/file")
+	fileGroup.GET("/getResource", fileHandler.GetResource)
 
 	registerAdminRoutes(engine.Group("/admin"), deps)
 	registerWebRoutes(engine.Group("/web"), deps)

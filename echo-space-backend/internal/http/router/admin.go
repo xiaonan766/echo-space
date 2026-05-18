@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 
+	filehandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler"
 	adminhandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler/admin"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/middleware"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
@@ -25,6 +26,10 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	interactRepository := repository.NewInteractRepository(deps.DB)
 	interactService := adminservice.NewInteractService(interactRepository)
 	interactHandler := adminhandler.NewInteractHandler(interactService)
+	shopRepository := repository.NewShopRepository(deps.DB)
+	shopService := adminservice.NewShopService(shopRepository)
+	shopHandler := adminhandler.NewShopHandler(shopService)
+	fileHandler := filehandler.NewFileHandler(deps.Config.File)
 
 	group.GET("/health", healthHandler.Health)
 
@@ -33,8 +38,14 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	accountGroup.POST("/checkCode", accountHandler.CheckCode)
 	accountGroup.POST("/login", accountHandler.Login)
 
+	filePublicGroup := group.Group("/file")
+	filePublicGroup.GET("/getResource", fileHandler.GetResource)
+
 	authGroup := group.Group("")
 	authGroup.Use(middleware.AdminAuth(accountService))
+
+	fileGroup := authGroup.Group("/file")
+	fileGroup.POST("/uploadImage", fileHandler.UploadImage)
 
 	indexGroup := authGroup.Group("/index")
 	indexGroup.GET("/getActualTimeStatisticsInfo", indexHandler.GetActualTimeStatisticsInfo)
@@ -66,4 +77,12 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	interactGroup.GET("/loadDanmu", interactHandler.LoadDanmu)
 	interactGroup.POST("/loadDanmu", interactHandler.LoadDanmu)
 	interactGroup.POST("/delDanmu", interactHandler.DeleteDanmu)
+
+	peripheralGroup := authGroup.Group("/shop/peripheral")
+	peripheralGroup.GET("/loadPeripheral", shopHandler.LoadPeripheral)
+	peripheralGroup.POST("/loadPeripheral", shopHandler.LoadPeripheral)
+	peripheralGroup.GET("/getPeripheral", shopHandler.GetPeripheral)
+	peripheralGroup.POST("/getPeripheral", shopHandler.GetPeripheral)
+	peripheralGroup.POST("/savePeripheral", shopHandler.SavePeripheral)
+	peripheralGroup.POST("/changeStatus", shopHandler.ChangePeripheralStatus)
 }

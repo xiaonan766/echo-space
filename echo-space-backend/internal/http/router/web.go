@@ -18,6 +18,10 @@ func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	categoryService := webservice.NewCategoryService(categoryRepository)
 	categoryHandler := webhandler.NewCategoryHandler(categoryService)
 
+	shopRepository := repository.NewShopRepository(deps.DB)
+	shopService := webservice.NewShopService(shopRepository)
+	shopHandler := webhandler.NewShopHandler(shopService)
+
 	accountGroup := group.Group("/account")
 	accountGroup.GET("/checkCode", accountHandler.CheckCode)
 	accountGroup.POST("/checkCode", accountHandler.CheckCode)
@@ -28,4 +32,10 @@ func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	categoryGroup := group.Group("/category")
 	categoryGroup.GET("/loadAllCategory", categoryHandler.LoadAllCategory)
 	categoryGroup.POST("/loadAllCategory", categoryHandler.LoadAllCategory)
+
+	shopGroup := group.Group("/shop")
+	shopGroup.GET("/loadRecommend", shopHandler.LoadRecommend)
+	shopGroup.POST("/loadRecommend", shopHandler.LoadRecommend)
+	shopGroup.GET("/loadList", shopHandler.LoadList)
+	shopGroup.POST("/loadList", shopHandler.LoadList)
 }

@@ -17,6 +17,7 @@ type Config struct {
 	Redis  RedisConfig  `yaml:"redis"`
 	MySQL  MySQLConfig  `yaml:"mysql"`
 	Admin  AdminConfig  `yaml:"admin"`
+	File   FileConfig   `yaml:"file"`
 }
 
 type ServerConfig struct {
@@ -69,6 +70,11 @@ func (c AdminConfig) TokenTTLDuration() time.Duration {
 	return duration
 }
 
+type FileConfig struct {
+	ResourceRoot string `yaml:"resourceRoot"`
+	MaxImageMB   int    `yaml:"maxImageMB"`
+}
+
 func Load() (Config, error) {
 	cfg := defaultConfig()
 	if err := loadYAML(&cfg); err != nil {
@@ -102,6 +108,10 @@ func defaultConfig() Config {
 			Account:  "admin",
 			Password: "admin123",
 			TokenTTL: "24h",
+		},
+		File: FileConfig{
+			ResourceRoot: "resources",
+			MaxImageMB:   10,
 		},
 	}
 }
@@ -159,6 +169,9 @@ func applyEnvOverrides(cfg *Config) {
 	cfg.Admin.Account = envString("ADMIN_ACCOUNT", cfg.Admin.Account)
 	cfg.Admin.Password = envString("ADMIN_PASSWORD", cfg.Admin.Password)
 	cfg.Admin.TokenTTL = envString("ADMIN_TOKEN_TTL", cfg.Admin.TokenTTL)
+
+	cfg.File.ResourceRoot = envString("FILE_RESOURCE_ROOT", cfg.File.ResourceRoot)
+	cfg.File.MaxImageMB = envInt("FILE_MAX_IMAGE_MB", cfg.File.MaxImageMB)
 }
 
 func envString(key string, fallback string) string {

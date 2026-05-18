@@ -72,17 +72,24 @@ const request = (config) => {
     const { url, params, dataType, showLoading = true, responseType = responseTypeJson, showError = true } = config;
     let contentType = contentTypeForm;
     let formData = new FormData();// 创建form对象
+    let hasFile = false;
     for (let key in params) {
-        formData.append(key, params[key] == undefined ? "" : params[key]);
+        const value = params[key] == undefined ? "" : params[key];
+        if (value instanceof File) {
+            hasFile = true;
+        }
+        formData.append(key, value);
     }
     if (dataType != null && dataType == 'json') {
         contentType = contentTypeJson;
     }
     const adminToken = VueCookies.get('adminToken')
     let headers = {
-        'Content-Type': contentType,
         'X-Requested-With': 'XMLHttpRequest',
         "adminToken": adminToken
+    }
+    if (!hasFile) {
+        headers['Content-Type'] = contentType;
     }
     return instance.post(url, formData, {
         onUploadProgress: (event) => {

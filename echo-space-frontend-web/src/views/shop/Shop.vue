@@ -49,18 +49,22 @@
       <div class="section-title">
         <span>{{ recommendTitle }}</span>
       </div>
-      <button
-        v-if="mainRecommend"
-        class="recommend-banner"
-        type="button"
-        :style="getImageStyle(mainRecommend)"
-        @click="openShopDetail(mainRecommend)"
-      >
-        <div class="banner-mask">
-          <div class="banner-label">系统推荐</div>
-          <div class="banner-name">{{ getItemName(mainRecommend) }}</div>
-        </div>
-      </button>
+      <div v-if="recommendList.length > 0" class="recommend-list">
+        <button
+          v-for="item in recommendList"
+          :key="getItemKey(item)"
+          class="recommend-card"
+          type="button"
+          :style="getImageStyle(item)"
+          @click="openShopDetail(item)"
+        >
+          <span v-if="!getItemImage(item)" class="recommend-empty-image">暂无图片</span>
+          <div class="banner-mask">
+            <div class="banner-label">系统推荐</div>
+            <div class="banner-name">{{ getItemName(item) }}</div>
+          </div>
+        </button>
+      </div>
       <div v-else class="empty-banner">
         {{ currentTypeLabel }}推荐内容待接入
       </div>
@@ -91,6 +95,10 @@
             <div class="item-meta" v-if="getItemAddress(item)">
               <span class="iconfont icon-home"></span>
               <span>{{ getItemAddress(item) }}</span>
+            </div>
+            <div class="item-meta" v-if="getItemStock(item)">
+              <span class="iconfont icon-list"></span>
+              <span>{{ getItemStock(item) }}</span>
             </div>
             <div class="item-bottom">
               <div :class="['item-price', hasPrice(item) ? '' : 'price-muted']">
@@ -155,7 +163,6 @@ const currentTypeLabel = computed(() => {
 const recommendTitle = computed(() => `热门${currentTypeLabel.value}`)
 const listTitle = computed(() => `${currentTypeLabel.value}列表`)
 const emptyText = computed(() => `暂无${currentTypeLabel.value}数据`)
-const mainRecommend = computed(() => recommendList.value[0])
 const hasMore = computed(() => pageInfo.pageNo < pageInfo.pageTotal)
 
 onMounted(() => {
@@ -331,6 +338,9 @@ const getImageStyle = (item) => {
 }
 
 const getItemTime = (item) => {
+  if (item.saleStartText) {
+    return item.saleStartText
+  }
   if (item.timeText) {
     return item.timeText
   }
@@ -347,6 +357,19 @@ const getItemAddress = (item) => {
   return item.address || item.venue || item.placeName || item.city || ''
 }
 
+const getItemStock = (item) => {
+  if (activeType.value !== 'goods') {
+    return ''
+  }
+  if (item.stockText) {
+    return item.stockText
+  }
+  if (item.availableStock === 0) {
+    return '暂无库存'
+  }
+  return item.availableStock ? `库存 ${item.availableStock}` : ''
+}
+
 const hasPrice = (item) => {
   return item.priceText || item.price || item.minPrice || item.salePrice
 }
@@ -359,11 +382,12 @@ const getItemPrice = (item) => {
   if (!price) {
     return '价格待定'
   }
-  return `￥${price} 起`
+  const priceText = `￥${Number(price).toFixed(2)}`
+  return activeType.value === 'goods' ? priceText : `${priceText} 起`
 }
 
 const getItemStatus = (item) => {
-  return item.statusName || item.saleStatusName || item.statusText || ''
+  return item.saleStatusName || item.statusName || item.statusText || ''
 }
 
 const getDetailPath = (item) => {
@@ -442,7 +466,7 @@ watch(
 .tab-item,
 .item-cover,
 .item-name,
-.recommend-banner {
+.recommend-card {
   border: none;
   background: transparent;
   padding: 0;
@@ -560,15 +584,21 @@ watch(
   font-weight: 700;
 }
 
-.recommend-banner,
+.recommend-list,
 .empty-banner {
   width: 100%;
-  height: 280px;
+  min-height: 280px;
   border-radius: 6px;
 }
 
-.recommend-banner {
-  display: block;
+.recommend-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.recommend-card {
+  min-height: 280px;
   overflow: hidden;
   background-color: #e7e9ee;
   background-size: cover;
@@ -591,10 +621,19 @@ watch(
   }
   .banner-name {
     max-width: 720px;
-    font-size: 30px;
+    font-size: 24px;
     font-weight: 700;
     line-height: 1.3;
   }
+}
+
+.recommend-empty-image {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
 }
 
 .empty-banner {

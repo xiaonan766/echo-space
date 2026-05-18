@@ -97,6 +97,17 @@ const menuList = [
     ],
   },
   {
+    menuName: "商城管理",
+    path: "/shop",
+    icon: "icon-datacenter",
+    children: [
+      {
+        menuName: "周边管理",
+        path: "/shop/peripheral",
+      },
+    ],
+  },
+  {
     menuName: "用户管理",
     path: "/user/userList",
     icon: "icon-fans",
