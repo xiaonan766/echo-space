@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -30,12 +31,19 @@ type SavePeripheralInput struct {
 	ProductName     string
 	CoverURL        string
 	Description     string
-	Price           float64
-	TotalStock      int
 	SaleStartTime   string
 	Status          int
 	RecommendStatus int
 	Sort            int
+	SkuList         []SavePeripheralSKUInput
+}
+
+type SavePeripheralSKUInput struct {
+	SkuID      uint64
+	SkuName    string
+	Price      float64
+	TotalStock int
+	Status     int
 }
 
 func NewShopService(shopRepository *repository.ShopRepository) *ShopService {
@@ -88,12 +96,6 @@ func (s *ShopService) SavePeripheral(ctx context.Context, input SavePeripheralIn
 	if len([]rune(input.ProductName)) > 100 {
 		return &BusinessError{Info: "\u5546\u54c1\u540d\u79f0\u4e0d\u80fd\u8d85\u8fc7100\u4e2a\u5b57"}
 	}
-	if input.Price <= 0 || math.IsNaN(input.Price) || math.IsInf(input.Price, 0) {
-		return &BusinessError{Info: "\u8bf7\u8f93\u5165\u6b63\u786e\u7684\u5355\u4ef7"}
-	}
-	if input.TotalStock < 0 {
-		return &BusinessError{Info: "\u5e93\u5b58\u6570\u91cf\u4e0d\u80fd\u5c0f\u4e8e0"}
-	}
 	if !isValidCommonStatus(input.Status) || !isValidRecommendStatus(input.RecommendStatus) || input.Sort < 0 {
 		return &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
 	}
@@ -103,17 +105,21 @@ func (s *ShopService) SavePeripheral(ctx context.Context, input SavePeripheralIn
 		return &BusinessError{Info: "\u5f00\u552e\u65f6\u95f4\u683c\u5f0f\u4e0d\u6b63\u786e"}
 	}
 
+	skuList, businessError := normalizeSavePeripheralSKUList(input.SkuList)
+	if businessError != nil {
+		return businessError
+	}
+
 	err = s.shopRepository.SavePeripheral(ctx, repository.SavePeripheralData{
 		ProductID:       input.ProductID,
 		ProductName:     input.ProductName,
 		CoverURL:        input.CoverURL,
 		Description:     input.Description,
-		Price:           roundMoney(input.Price),
-		TotalStock:      input.TotalStock,
 		SaleStartTime:   saleStartTime,
 		Status:          input.Status,
 		RecommendStatus: input.RecommendStatus,
 		Sort:            input.Sort,
+		SkuList:         skuList,
 	})
 	if errors.Is(err, repository.ErrStockLessThanOccupied) {
 		return &BusinessError{Info: "\u603b\u5e93\u5b58\u4e0d\u80fd\u5c0f\u4e8e\u5df2\u552e\u5e93\u5b58\u548c\u9501\u5b9a\u5e93\u5b58\u4e4b\u548c"}
@@ -162,6 +168,54 @@ func normalizePeripheralListInput(input PeripheralListInput) PeripheralListInput
 	return input
 }
 
+func normalizeSavePeripheralSKUList(input []SavePeripheralSKUInput) ([]repository.SavePeripheralSKUData, *BusinessError) {
+	if len(input) == 0 {
+		return nil, &BusinessError{Info: "请至少添加一个商品规格"}
+	}
+
+	result := make([]repository.SavePeripheralSKUData, 0, len(input))
+	seenName := make(map[string]struct{}, len(input))
+	activeCount := 0
+	for _, sku := range input {
+		sku.SkuName = strings.TrimSpace(sku.SkuName)
+		if sku.SkuName == "" {
+			return nil, &BusinessError{Info: "请输入规格名称"}
+		}
+		if len([]rune(sku.SkuName)) > 80 {
+			return nil, &BusinessError{Info: "规格名称不能超过80个字"}
+		}
+		if _, ok := seenName[sku.SkuName]; ok {
+			return nil, &BusinessError{Info: "规格名称不能重复"}
+		}
+		seenName[sku.SkuName] = struct{}{}
+
+		if sku.Price <= 0 || math.IsNaN(sku.Price) || math.IsInf(sku.Price, 0) {
+			return nil, &BusinessError{Info: "请输入正确的规格单价"}
+		}
+		if sku.TotalStock < 0 {
+			return nil, &BusinessError{Info: "规格库存数量不能小于0"}
+		}
+		if !isValidCommonStatus(sku.Status) {
+			return nil, &BusinessError{Info: "规格状态参数错误"}
+		}
+		if sku.Status == domain.ProductStatusOnShelf {
+			activeCount++
+		}
+
+		result = append(result, repository.SavePeripheralSKUData{
+			SkuID:      sku.SkuID,
+			SkuName:    sku.SkuName,
+			Price:      roundMoney(sku.Price),
+			TotalStock: sku.TotalStock,
+			Status:     sku.Status,
+		})
+	}
+	if activeCount == 0 {
+		return nil, &BusinessError{Info: "请至少启用一个商品规格"}
+	}
+	return result, nil
+}
+
 func parseAdminDateTime(value string) (*time.Time, error) {
 	if strings.TrimSpace(value) == "" {
 		return nil, nil
@@ -208,6 +262,12 @@ func fillPeripheralName(item *domain.AdminPeripheralItem) {
 	if item.SkuName == "" {
 		item.SkuName = "默认规格"
 	}
+	item.PriceText = buildPriceText(item.Price, item.MaxPrice)
+	for index := range item.SkuList {
+		if item.SkuList[index].SkuName == "" {
+			item.SkuList[index].SkuName = "默认规格"
+		}
+	}
 }
 
 func isValidCommonStatus(status int) bool {
@@ -220,4 +280,18 @@ func isValidRecommendStatus(status int) bool {
 
 func roundMoney(value float64) float64 {
 	return math.Round(value*100) / 100
+}
+
+func buildPriceText(minPrice float64, maxPrice float64) string {
+	if minPrice <= 0 {
+		return "价格待定"
+	}
+	if maxPrice > minPrice {
+		return formatMoney(minPrice) + " - " + formatMoney(maxPrice)
+	}
+	return formatMoney(minPrice)
+}
+
+func formatMoney(value float64) string {
+	return "￥" + strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", value), "0"), ".")
 }

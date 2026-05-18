@@ -38,4 +38,6 @@ func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	shopGroup.POST("/loadRecommend", shopHandler.LoadRecommend)
 	shopGroup.GET("/loadList", shopHandler.LoadList)
 	shopGroup.POST("/loadList", shopHandler.LoadList)
+	shopGroup.GET("/getPeripheralDetail", shopHandler.GetPeripheralDetail)
+	shopGroup.POST("/getPeripheralDetail", shopHandler.GetPeripheralDetail)
 }

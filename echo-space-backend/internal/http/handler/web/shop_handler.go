@@ -48,6 +48,28 @@ func (h *ShopHandler) LoadList(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *ShopHandler) GetPeripheralDetail(c *gin.Context) {
+	productID, ok := parseWebRequiredUint64(formOrQuery(c, "productId"))
+	if !ok {
+		response.BusinessError(c, "参数错误", nil)
+		return
+	}
+
+	result, err := h.shopService.GetPeripheralDetail(c.Request.Context(), productID)
+	if err != nil {
+		if businessError, ok := webservice.IsBusinessError(err); ok {
+			response.BusinessError(c, businessError.Info, nil)
+			return
+		}
+
+		log.Printf("web get peripheral detail: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+
+	response.Success(c, result)
+}
+
 func formOrQuery(c *gin.Context, key string) string {
 	if value := strings.TrimSpace(c.PostForm(key)); value != "" {
 		return value
@@ -61,4 +83,14 @@ func parseWebIntWithDefault(value string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func parseWebRequiredUint64(value string) (uint64, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	return parsed, err == nil
 }

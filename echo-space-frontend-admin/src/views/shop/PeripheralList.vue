@@ -63,7 +63,7 @@
         </div>
       </template>
 
-      <template #price="{ row }"> ¥{{ formatPrice(row.price) }} </template>
+      <template #price="{ row }"> {{ row.priceText || formatPrice(row.price) }} </template>
 
       <template #stock="{ row }">
         <div class="stock-info">
@@ -137,9 +137,9 @@ const columns = [
     scopedSlots: 'productInfo',
   },
   {
-    label: '单价',
+    label: '价格',
     prop: 'price',
-    width: 100,
+    width: 110,
     scopedSlots: 'price',
   },
   {
@@ -238,7 +238,7 @@ const changeStatus = (row) => {
 }
 
 const formatPrice = (price) => {
-  return Number(price || 0).toFixed(2)
+  return `¥${Number(price || 0).toFixed(2)}`
 }
 </script>
 

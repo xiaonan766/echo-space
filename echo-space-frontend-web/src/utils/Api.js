@@ -77,6 +77,7 @@ const Api = {
     //购物
     loadShopRecommend: server_shop + "/loadRecommend",
     loadShopList: server_shop + "/loadList",
+    getPeripheralDetail: server_shop + "/getPeripheralDetail",
 
     //播放历史
     playHisotry: server_web + "/history/loadHistory",

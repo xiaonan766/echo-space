@@ -56,45 +56,75 @@ func (ShopSKU) TableName() string {
 }
 
 type AdminPeripheralItem struct {
-	ProductID        uint64  `gorm:"column:product_id" json:"productId"`
-	ProductName      string  `gorm:"column:product_name" json:"productName"`
-	CoverURL         string  `gorm:"column:cover_url" json:"coverUrl"`
-	Description      string  `gorm:"column:description" json:"description"`
-	Status           int     `gorm:"column:status" json:"status"`
-	StatusName       string  `gorm:"-" json:"statusName"`
-	RecommendStatus  int     `gorm:"column:recommend_status" json:"recommendStatus"`
-	SaleStartTime    string  `gorm:"column:sale_start_time" json:"saleStartTime"`
-	LastOffShelfTime string  `gorm:"column:last_off_shelf_time" json:"lastOffShelfTime"`
-	Sort             int     `gorm:"column:sort" json:"sort"`
-	SkuID            uint64  `gorm:"column:sku_id" json:"skuId"`
-	SkuName          string  `gorm:"column:sku_name" json:"skuName"`
-	Price            float64 `gorm:"column:price" json:"price"`
-	TotalStock       int     `gorm:"column:total_stock" json:"totalStock"`
-	LockedStock      int     `gorm:"column:locked_stock" json:"lockedStock"`
-	SoldStock        int     `gorm:"column:sold_stock" json:"soldStock"`
-	AvailableStock   int     `gorm:"column:available_stock" json:"availableStock"`
-	SaleStatus       int     `gorm:"column:sale_status" json:"saleStatus"`
-	SaleStatusName   string  `gorm:"-" json:"saleStatusName"`
-	CreateTime       string  `gorm:"column:create_time" json:"createTime"`
-	UpdateTime       string  `gorm:"column:update_time" json:"updateTime"`
+	ProductID        uint64               `gorm:"column:product_id" json:"productId"`
+	ProductName      string               `gorm:"column:product_name" json:"productName"`
+	CoverURL         string               `gorm:"column:cover_url" json:"coverUrl"`
+	Description      string               `gorm:"column:description" json:"description"`
+	Status           int                  `gorm:"column:status" json:"status"`
+	StatusName       string               `gorm:"-" json:"statusName"`
+	RecommendStatus  int                  `gorm:"column:recommend_status" json:"recommendStatus"`
+	SaleStartTime    string               `gorm:"column:sale_start_time" json:"saleStartTime"`
+	LastOffShelfTime string               `gorm:"column:last_off_shelf_time" json:"lastOffShelfTime"`
+	Sort             int                  `gorm:"column:sort" json:"sort"`
+	SkuID            uint64               `gorm:"column:sku_id" json:"skuId"`
+	SkuName          string               `gorm:"column:sku_name" json:"skuName"`
+	Price            float64              `gorm:"column:price" json:"price"`
+	MaxPrice         float64              `gorm:"column:max_price" json:"maxPrice"`
+	PriceText        string               `gorm:"-" json:"priceText"`
+	TotalStock       int                  `gorm:"column:total_stock" json:"totalStock"`
+	LockedStock      int                  `gorm:"column:locked_stock" json:"lockedStock"`
+	SoldStock        int                  `gorm:"column:sold_stock" json:"soldStock"`
+	AvailableStock   int                  `gorm:"column:available_stock" json:"availableStock"`
+	SaleStatus       int                  `gorm:"column:sale_status" json:"saleStatus"`
+	SaleStatusName   string               `gorm:"-" json:"saleStatusName"`
+	CreateTime       string               `gorm:"column:create_time" json:"createTime"`
+	UpdateTime       string               `gorm:"column:update_time" json:"updateTime"`
+	SkuList          []AdminPeripheralSKU `gorm:"-" json:"skuList"`
+}
+
+type AdminPeripheralSKU struct {
+	SkuID          uint64  `gorm:"column:sku_id" json:"skuId"`
+	ProductID      uint64  `gorm:"column:product_id" json:"productId"`
+	SkuName        string  `gorm:"column:sku_name" json:"skuName"`
+	Price          float64 `gorm:"column:price" json:"price"`
+	TotalStock     int     `gorm:"column:total_stock" json:"totalStock"`
+	LockedStock    int     `gorm:"column:locked_stock" json:"lockedStock"`
+	SoldStock      int     `gorm:"column:sold_stock" json:"soldStock"`
+	AvailableStock int     `gorm:"column:available_stock" json:"availableStock"`
+	Status         int     `gorm:"column:status" json:"status"`
 }
 
 type WebShopItem struct {
-	ItemID          uint64  `gorm:"column:item_id" json:"itemId"`
-	ProductID       uint64  `gorm:"column:product_id" json:"productId"`
-	SkuID           uint64  `gorm:"column:sku_id" json:"skuId"`
-	ItemName        string  `gorm:"column:item_name" json:"itemName"`
-	CoverURL        string  `gorm:"column:cover_url" json:"coverUrl"`
-	Description     string  `gorm:"column:description" json:"description"`
-	Price           float64 `gorm:"column:price" json:"price"`
-	PriceText       string  `gorm:"-" json:"priceText"`
-	TotalStock      int     `gorm:"column:total_stock" json:"totalStock"`
-	AvailableStock  int     `gorm:"column:available_stock" json:"availableStock"`
-	StockText       string  `gorm:"-" json:"stockText"`
-	SaleStartTime   string  `gorm:"column:sale_start_time" json:"saleStartTime"`
-	SaleStartText   string  `gorm:"-" json:"saleStartText"`
-	SaleStatus      int     `gorm:"column:sale_status" json:"saleStatus"`
-	SaleStatusName  string  `gorm:"-" json:"saleStatusName"`
-	StatusName      string  `gorm:"-" json:"statusName"`
-	RecommendStatus int     `gorm:"column:recommend_status" json:"recommendStatus"`
+	ItemID          uint64       `gorm:"column:item_id" json:"itemId"`
+	ProductID       uint64       `gorm:"column:product_id" json:"productId"`
+	SkuID           uint64       `gorm:"column:sku_id" json:"skuId"`
+	ItemName        string       `gorm:"column:item_name" json:"itemName"`
+	CoverURL        string       `gorm:"column:cover_url" json:"coverUrl"`
+	Description     string       `gorm:"column:description" json:"description"`
+	Price           float64      `gorm:"column:price" json:"price"`
+	MaxPrice        float64      `gorm:"column:max_price" json:"maxPrice"`
+	PriceText       string       `gorm:"-" json:"priceText"`
+	TotalStock      int          `gorm:"column:total_stock" json:"totalStock"`
+	AvailableStock  int          `gorm:"column:available_stock" json:"availableStock"`
+	StockText       string       `gorm:"-" json:"stockText"`
+	SaleStartTime   string       `gorm:"column:sale_start_time" json:"saleStartTime"`
+	SaleStartText   string       `gorm:"-" json:"saleStartText"`
+	SaleStatus      int          `gorm:"column:sale_status" json:"saleStatus"`
+	SaleStatusName  string       `gorm:"-" json:"saleStatusName"`
+	StatusName      string       `gorm:"-" json:"statusName"`
+	RecommendStatus int          `gorm:"column:recommend_status" json:"recommendStatus"`
+	SkuList         []WebShopSKU `gorm:"-" json:"skuList"`
+}
+
+type WebShopSKU struct {
+	SkuID          uint64  `gorm:"column:sku_id" json:"skuId"`
+	SkuName        string  `gorm:"column:sku_name" json:"skuName"`
+	Price          float64 `gorm:"column:price" json:"price"`
+	PriceText      string  `gorm:"-" json:"priceText"`
+	TotalStock     int     `gorm:"column:total_stock" json:"totalStock"`
+	AvailableStock int     `gorm:"column:available_stock" json:"availableStock"`
+	StockText      string  `gorm:"-" json:"stockText"`
+	Status         int     `gorm:"column:status" json:"status"`
+	SaleStatus     int     `gorm:"column:sale_status" json:"saleStatus"`
+	SaleStatusName string  `gorm:"-" json:"saleStatusName"`
 }

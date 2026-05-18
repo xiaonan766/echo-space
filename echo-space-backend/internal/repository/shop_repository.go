@@ -39,12 +39,19 @@ type SavePeripheralData struct {
 	ProductName     string
 	CoverURL        string
 	Description     string
-	Price           float64
-	TotalStock      int
 	SaleStartTime   *time.Time
 	Status          int
 	RecommendStatus int
 	Sort            int
+	SkuList         []SavePeripheralSKUData
+}
+
+type SavePeripheralSKUData struct {
+	SkuID      uint64
+	SkuName    string
+	Price      float64
+	TotalStock int
+	Status     int
 }
 
 func NewShopRepository(db *gorm.DB) *ShopRepository {
@@ -64,32 +71,7 @@ func (r *ShopRepository) ListPeripheralByPage(ctx context.Context, query Periphe
 	offset := (query.PageNo - 1) * query.PageSize
 	listDB := r.applyPeripheralListFilter(r.db.WithContext(ctx).Table("shop_product sp"), query)
 	err := listDB.
-		Select(`
-			sp.product_id,
-			COALESCE(sp.product_name, '') AS product_name,
-			COALESCE(sp.cover_url, '') AS cover_url,
-			COALESCE(sp.description, '') AS description,
-			sp.status,
-			sp.recommend_status,
-			COALESCE(DATE_FORMAT(sp.sale_start_time, '%Y-%m-%d %H:%i:%s'), '') AS sale_start_time,
-			COALESCE(DATE_FORMAT(sp.last_off_shelf_time, '%Y-%m-%d %H:%i:%s'), '') AS last_off_shelf_time,
-			sp.sort,
-			COALESCE(ss.sku_id, 0) AS sku_id,
-			COALESCE(ss.sku_name, '') AS sku_name,
-			COALESCE(ss.price, 0) AS price,
-			COALESCE(ss.total_stock, 0) AS total_stock,
-			COALESCE(ss.locked_stock, 0) AS locked_stock,
-			COALESCE(ss.sold_stock, 0) AS sold_stock,
-			GREATEST(COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0), 0) AS available_stock,
-			CASE
-				WHEN sp.status = 0 THEN 3
-				WHEN sp.sale_start_time IS NOT NULL AND sp.sale_start_time > NOW() THEN 0
-				WHEN COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0) <= 0 THEN 2
-				ELSE 1
-			END AS sale_status,
-			COALESCE(DATE_FORMAT(sp.create_time, '%Y-%m-%d %H:%i:%s'), '') AS create_time,
-			COALESCE(DATE_FORMAT(sp.update_time, '%Y-%m-%d %H:%i:%s'), '') AS update_time
-		`).
+		Select(adminPeripheralSelectSQL()).
 		Order("sp.sort desc").
 		Order("sp.product_id desc").
 		Offset(offset).
@@ -104,38 +86,38 @@ func (r *ShopRepository) ListPeripheralByPage(ctx context.Context, query Periphe
 func (r *ShopRepository) FindPeripheralDetail(ctx context.Context, productID uint64) (*domain.AdminPeripheralItem, error) {
 	var detail domain.AdminPeripheralItem
 	err := r.applyPeripheralListFilter(r.db.WithContext(ctx).Table("shop_product sp"), PeripheralListQuery{}).
-		Select(`
-			sp.product_id,
-			COALESCE(sp.product_name, '') AS product_name,
-			COALESCE(sp.cover_url, '') AS cover_url,
-			COALESCE(sp.description, '') AS description,
-			sp.status,
-			sp.recommend_status,
-			COALESCE(DATE_FORMAT(sp.sale_start_time, '%Y-%m-%d %H:%i:%s'), '') AS sale_start_time,
-			COALESCE(DATE_FORMAT(sp.last_off_shelf_time, '%Y-%m-%d %H:%i:%s'), '') AS last_off_shelf_time,
-			sp.sort,
-			COALESCE(ss.sku_id, 0) AS sku_id,
-			COALESCE(ss.sku_name, '') AS sku_name,
-			COALESCE(ss.price, 0) AS price,
-			COALESCE(ss.total_stock, 0) AS total_stock,
-			COALESCE(ss.locked_stock, 0) AS locked_stock,
-			COALESCE(ss.sold_stock, 0) AS sold_stock,
-			GREATEST(COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0), 0) AS available_stock,
-			CASE
-				WHEN sp.status = 0 THEN 3
-				WHEN sp.sale_start_time IS NOT NULL AND sp.sale_start_time > NOW() THEN 0
-				WHEN COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0) <= 0 THEN 2
-				ELSE 1
-			END AS sale_status,
-			COALESCE(DATE_FORMAT(sp.create_time, '%Y-%m-%d %H:%i:%s'), '') AS create_time,
-			COALESCE(DATE_FORMAT(sp.update_time, '%Y-%m-%d %H:%i:%s'), '') AS update_time
-		`).
+		Select(adminPeripheralSelectSQL()).
 		Where("sp.product_id = ?", productID).
 		Take(&detail).Error
 	if err != nil {
 		return nil, err
 	}
+	skuList, err := r.ListPeripheralSKU(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	detail.SkuList = skuList
 	return &detail, nil
+}
+
+func (r *ShopRepository) ListPeripheralSKU(ctx context.Context, productID uint64) ([]domain.AdminPeripheralSKU, error) {
+	var list []domain.AdminPeripheralSKU
+	err := r.db.WithContext(ctx).Table("shop_sku").
+		Select(`
+			sku_id,
+			product_id,
+			COALESCE(sku_name, '') AS sku_name,
+			COALESCE(price, 0) AS price,
+			COALESCE(total_stock, 0) AS total_stock,
+			COALESCE(locked_stock, 0) AS locked_stock,
+			COALESCE(sold_stock, 0) AS sold_stock,
+			GREATEST(COALESCE(total_stock, 0) - COALESCE(locked_stock, 0) - COALESCE(sold_stock, 0), 0) AS available_stock,
+			status
+		`).
+		Where("product_id = ?", productID).
+		Order("sku_id asc").
+		Scan(&list).Error
+	return list, err
 }
 
 func (r *ShopRepository) ListRecommendedPeripheralForWeb(ctx context.Context, limit int) ([]domain.WebShopItem, error) {
@@ -173,6 +155,44 @@ func (r *ShopRepository) ListPeripheralForWeb(ctx context.Context, query WebShop
 	return list, totalCount, nil
 }
 
+func (r *ShopRepository) FindWebPeripheralDetail(ctx context.Context, productID uint64) (*domain.WebShopItem, error) {
+	var detail domain.WebShopItem
+	err := r.applyWebPeripheralListFilter(r.db.WithContext(ctx).Table("shop_product sp"), "").
+		Select(webPeripheralSelectSQL()).
+		Where("sp.product_id = ?", productID).
+		Take(&detail).Error
+	if err != nil {
+		return nil, err
+	}
+	skuList, err := r.ListWebPeripheralSKU(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	detail.SkuList = skuList
+	return &detail, nil
+}
+
+func (r *ShopRepository) ListWebPeripheralSKU(ctx context.Context, productID uint64) ([]domain.WebShopSKU, error) {
+	var list []domain.WebShopSKU
+	err := r.db.WithContext(ctx).Table("shop_sku").
+		Select(`
+			sku_id,
+			COALESCE(sku_name, '') AS sku_name,
+			COALESCE(price, 0) AS price,
+			COALESCE(total_stock, 0) AS total_stock,
+			GREATEST(COALESCE(total_stock, 0) - COALESCE(locked_stock, 0) - COALESCE(sold_stock, 0), 0) AS available_stock,
+			status,
+			CASE
+				WHEN COALESCE(total_stock, 0) - COALESCE(locked_stock, 0) - COALESCE(sold_stock, 0) <= 0 THEN 2
+				ELSE 1
+			END AS sale_status
+		`).
+		Where("product_id = ? AND status = ?", productID, domain.ProductStatusOnShelf).
+		Order("sku_id asc").
+		Scan(&list).Error
+	return list, err
+}
+
 func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheralData) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if data.ProductID == 0 {
@@ -189,14 +209,19 @@ func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheral
 			if err := tx.Create(product).Error; err != nil {
 				return err
 			}
-			sku := &domain.ShopSKU{
-				ProductID:  product.ProductID,
-				SkuName:    defaultPeripheralSkuName,
-				Price:      data.Price,
-				TotalStock: data.TotalStock,
-				Status:     data.Status,
+			for _, skuData := range data.SkuList {
+				sku := &domain.ShopSKU{
+					ProductID:  product.ProductID,
+					SkuName:    skuData.SkuName,
+					Price:      skuData.Price,
+					TotalStock: skuData.TotalStock,
+					Status:     skuData.Status,
+				}
+				if err := tx.Create(sku).Error; err != nil {
+					return err
+				}
 			}
-			return tx.Create(sku).Error
+			return nil
 		}
 
 		var product domain.ShopProduct
@@ -206,31 +231,36 @@ func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheral
 			return err
 		}
 
-		var sku domain.ShopSKU
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		var existingSkuList []domain.ShopSKU
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("product_id = ?", data.ProductID).
-			Order("sku_id asc").
-			Take(&sku).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			sku = domain.ShopSKU{
-				ProductID:  data.ProductID,
-				SkuName:    defaultPeripheralSkuName,
-				Price:      data.Price,
-				TotalStock: data.TotalStock,
-				Status:     data.Status,
-			}
-			return tx.Create(&sku).Error
-		}
-		if err != nil {
+			Find(&existingSkuList).Error; err != nil {
 			return err
 		}
 
-		minTotalStock := sku.LockedStock + sku.SoldStock
-		if data.TotalStock < minTotalStock {
-			return ErrStockLessThanOccupied
+		existingByID := make(map[uint64]domain.ShopSKU, len(existingSkuList))
+		for _, sku := range existingSkuList {
+			existingByID[sku.SkuID] = sku
 		}
 
-		if isPriceChanged(sku.Price, data.Price) && !canChangePrice(product) {
+		priceChanged := false
+		for _, skuData := range data.SkuList {
+			if skuData.SkuID == 0 {
+				priceChanged = true
+				continue
+			}
+			sku, ok := existingByID[skuData.SkuID]
+			if !ok {
+				return gorm.ErrRecordNotFound
+			}
+			if skuData.TotalStock < sku.LockedStock+sku.SoldStock {
+				return ErrStockLessThanOccupied
+			}
+			if isPriceChanged(sku.Price, skuData.Price) {
+				priceChanged = true
+			}
+		}
+		if priceChanged && !canChangePrice(product) {
 			return ErrPriceChangeTooEarly
 		}
 
@@ -253,15 +283,33 @@ func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheral
 			return err
 		}
 
-		return tx.Model(&domain.ShopSKU{}).
-			Where("sku_id = ?", sku.SkuID).
-			Updates(map[string]any{
-				"sku_name":    defaultPeripheralSkuName,
-				"price":       data.Price,
-				"total_stock": data.TotalStock,
-				"status":      data.Status,
-				"version":     gorm.Expr("version + ?", 1),
-			}).Error
+		for _, skuData := range data.SkuList {
+			if skuData.SkuID == 0 {
+				sku := &domain.ShopSKU{
+					ProductID:  data.ProductID,
+					SkuName:    skuData.SkuName,
+					Price:      skuData.Price,
+					TotalStock: skuData.TotalStock,
+					Status:     skuData.Status,
+				}
+				if err := tx.Create(sku).Error; err != nil {
+					return err
+				}
+				continue
+			}
+			if err := tx.Model(&domain.ShopSKU{}).
+				Where("sku_id = ? AND product_id = ?", skuData.SkuID, data.ProductID).
+				Updates(map[string]any{
+					"sku_name":    skuData.SkuName,
+					"price":       skuData.Price,
+					"total_stock": skuData.TotalStock,
+					"status":      skuData.Status,
+					"version":     gorm.Expr("version + ?", 1),
+				}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
@@ -296,15 +344,13 @@ func (r *ShopRepository) ChangePeripheralStatus(ctx context.Context, productID u
 		if rowsAffected == 0 {
 			return nil
 		}
-		return tx.Model(&domain.ShopSKU{}).
-			Where("product_id = ?", productID).
-			Update("status", status).Error
+		return nil
 	})
 	return rowsAffected, err
 }
 
 func (r *ShopRepository) applyPeripheralListFilter(db *gorm.DB, query PeripheralListQuery) *gorm.DB {
-	db = db.Joins("LEFT JOIN shop_sku ss ON sp.product_id = ss.product_id").
+	db = db.Joins(skuSummaryJoinSQL()).
 		Where("sp.product_type = ?", domain.ProductTypePeripheral)
 	if query.ProductNameFuzzy != "" {
 		db = db.Where("sp.product_name LIKE ?", "%"+query.ProductNameFuzzy+"%")
@@ -318,10 +364,10 @@ func (r *ShopRepository) applyPeripheralListFilter(db *gorm.DB, query Peripheral
 			db = db.Where("sp.status = ? AND sp.sale_start_time IS NOT NULL AND sp.sale_start_time > NOW()", domain.ProductStatusOnShelf)
 		case domain.SaleStatusOnSale:
 			db = db.Where("sp.status = ? AND (sp.sale_start_time IS NULL OR sp.sale_start_time <= NOW())", domain.ProductStatusOnShelf).
-				Where("COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0) > 0")
+				Where("COALESCE(ss.active_available_stock, 0) > 0")
 		case domain.SaleStatusSoldOut:
 			db = db.Where("sp.status = ? AND (sp.sale_start_time IS NULL OR sp.sale_start_time <= NOW())", domain.ProductStatusOnShelf).
-				Where("COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0) <= 0")
+				Where("COALESCE(ss.active_available_stock, 0) <= 0")
 		case domain.SaleStatusOff:
 			db = db.Where("sp.status = ?", domain.ProductStatusOffShelf)
 		}
@@ -330,14 +376,44 @@ func (r *ShopRepository) applyPeripheralListFilter(db *gorm.DB, query Peripheral
 }
 
 func (r *ShopRepository) applyWebPeripheralListFilter(db *gorm.DB, keyword string) *gorm.DB {
-	db = db.Joins("JOIN shop_sku ss ON sp.product_id = ss.product_id").
+	db = db.Joins(skuSummaryJoinSQL()).
 		Where("sp.product_type = ?", domain.ProductTypePeripheral).
 		Where("sp.status = ?", domain.ProductStatusOnShelf).
-		Where("ss.status = ?", domain.ProductStatusOnShelf)
+		Where("COALESCE(ss.active_sku_count, 0) > 0")
 	if keyword != "" {
 		db = db.Where("sp.product_name LIKE ?", "%"+keyword+"%")
 	}
 	return db
+}
+
+func adminPeripheralSelectSQL() string {
+	return `
+		sp.product_id,
+		COALESCE(sp.product_name, '') AS product_name,
+		COALESCE(sp.cover_url, '') AS cover_url,
+		COALESCE(sp.description, '') AS description,
+		sp.status,
+		sp.recommend_status,
+		COALESCE(DATE_FORMAT(sp.sale_start_time, '%Y-%m-%d %H:%i:%s'), '') AS sale_start_time,
+		COALESCE(DATE_FORMAT(sp.last_off_shelf_time, '%Y-%m-%d %H:%i:%s'), '') AS last_off_shelf_time,
+		sp.sort,
+		COALESCE(ss.sku_id, 0) AS sku_id,
+		COALESCE(ss.sku_name, '') AS sku_name,
+		COALESCE(ss.min_price, 0) AS price,
+		COALESCE(ss.max_price, 0) AS max_price,
+		COALESCE(ss.total_stock, 0) AS total_stock,
+		COALESCE(ss.locked_stock, 0) AS locked_stock,
+		COALESCE(ss.sold_stock, 0) AS sold_stock,
+		COALESCE(ss.available_stock, 0) AS available_stock,
+		CASE
+			WHEN sp.status = 0 THEN 3
+			WHEN sp.sale_start_time IS NOT NULL AND sp.sale_start_time > NOW() THEN 0
+			WHEN COALESCE(ss.active_available_stock, 0) <= 0 THEN 2
+			ELSE 1
+		END AS sale_status,
+		COALESCE(DATE_FORMAT(sp.create_time, '%Y-%m-%d %H:%i:%s'), '') AS create_time,
+		COALESCE(DATE_FORMAT(sp.update_time, '%Y-%m-%d %H:%i:%s'), '') AS update_time
+	`
 }
 
 func webPeripheralSelectSQL() string {
@@ -348,16 +424,38 @@ func webPeripheralSelectSQL() string {
 		COALESCE(sp.product_name, '') AS item_name,
 		COALESCE(sp.cover_url, '') AS cover_url,
 		COALESCE(sp.description, '') AS description,
-		COALESCE(ss.price, 0) AS price,
+		COALESCE(ss.min_price, 0) AS price,
+		COALESCE(ss.max_price, 0) AS max_price,
 		COALESCE(ss.total_stock, 0) AS total_stock,
-		GREATEST(COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0), 0) AS available_stock,
+		COALESCE(ss.active_available_stock, 0) AS available_stock,
 		COALESCE(DATE_FORMAT(sp.sale_start_time, '%Y-%m-%d %H:%i:%s'), '') AS sale_start_time,
 		CASE
 			WHEN sp.sale_start_time IS NOT NULL AND sp.sale_start_time > NOW() THEN 0
-			WHEN COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0) <= 0 THEN 2
+			WHEN COALESCE(ss.active_available_stock, 0) <= 0 THEN 2
 			ELSE 1
 		END AS sale_status,
 		sp.recommend_status
+	`
+}
+
+func skuSummaryJoinSQL() string {
+	return `
+		LEFT JOIN (
+			SELECT
+				product_id,
+				MIN(sku_id) AS sku_id,
+				MIN(sku_name) AS sku_name,
+				MIN(CASE WHEN status = 1 THEN price END) AS min_price,
+				MAX(CASE WHEN status = 1 THEN price END) AS max_price,
+				SUM(total_stock) AS total_stock,
+				SUM(locked_stock) AS locked_stock,
+				SUM(sold_stock) AS sold_stock,
+				SUM(GREATEST(total_stock - locked_stock - sold_stock, 0)) AS available_stock,
+				SUM(CASE WHEN status = 1 THEN GREATEST(total_stock - locked_stock - sold_stock, 0) ELSE 0 END) AS active_available_stock,
+				SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS active_sku_count
+			FROM shop_sku
+			GROUP BY product_id
+		) ss ON sp.product_id = ss.product_id
 	`
 }
 

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"log"
 	"strconv"
 	"strings"
@@ -80,15 +81,9 @@ func (h *ShopHandler) SavePeripheral(c *gin.Context) {
 		return
 	}
 
-	price, ok := parseRequiredFloatForm(c, "price")
+	skuList, ok := parsePeripheralSKUList(c.PostForm("skuList"))
 	if !ok {
-		response.BusinessError(c, "\u8bf7\u8f93\u5165\u6b63\u786e\u7684\u5355\u4ef7", nil)
-		return
-	}
-
-	totalStock, ok := parseRequiredIntForm(c, "totalStock")
-	if !ok {
-		response.BusinessError(c, "\u8bf7\u8f93\u5165\u6b63\u786e\u7684\u5e93\u5b58\u6570\u91cf", nil)
+		response.BusinessError(c, "\u8bf7\u8f93\u5165\u6b63\u786e\u7684\u89c4\u683c\u4fe1\u606f", nil)
 		return
 	}
 
@@ -109,12 +104,11 @@ func (h *ShopHandler) SavePeripheral(c *gin.Context) {
 		ProductName:     c.PostForm("productName"),
 		CoverURL:        c.PostForm("coverUrl"),
 		Description:     c.PostForm("description"),
-		Price:           price,
-		TotalStock:      totalStock,
 		SaleStartTime:   c.PostForm("saleStartTime"),
 		Status:          status,
 		RecommendStatus: recommendStatus,
 		Sort:            parseIntWithDefault(c.PostForm("sort"), 0),
+		SkuList:         skuList,
 	})
 	if err != nil {
 		if businessError, ok := adminservice.IsBusinessError(err); ok {
@@ -128,6 +122,19 @@ func (h *ShopHandler) SavePeripheral(c *gin.Context) {
 	}
 
 	response.Success(c, nil)
+}
+
+func parsePeripheralSKUList(value string) ([]adminservice.SavePeripheralSKUInput, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, false
+	}
+
+	var skuList []adminservice.SavePeripheralSKUInput
+	if err := json.Unmarshal([]byte(value), &skuList); err != nil {
+		return nil, false
+	}
+	return skuList, true
 }
 
 func (h *ShopHandler) ChangePeripheralStatus(c *gin.Context) {

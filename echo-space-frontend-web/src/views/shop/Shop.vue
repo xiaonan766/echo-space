@@ -382,7 +382,7 @@ const getItemPrice = (item) => {
   if (!price) {
     return '价格待定'
   }
-  const priceText = `￥${Number(price).toFixed(2)}`
+  const priceText = `¥${Number(price).toFixed(2)}`
   return activeType.value === 'goods' ? priceText : `${priceText} 起`
 }
 
@@ -394,7 +394,21 @@ const getDetailPath = (item) => {
   return item.detailUrl || item.detailPath || ''
 }
 
+const getPeripheralProductId = (item) => {
+  return item.productId || item.itemId || item.goodsId || item.id || ''
+}
+
 const openShopDetail = (item) => {
+  if (activeType.value === 'goods') {
+    const productId = getPeripheralProductId(item)
+    if (!productId) {
+      proxy.Message.warning('商品信息不完整')
+      return
+    }
+    router.push(`/shop/peripheral/${productId}`)
+    return
+  }
+
   const detailPath = getDetailPath(item)
   if (!detailPath) {
     proxy.Message.warning('购买页面待接入')
