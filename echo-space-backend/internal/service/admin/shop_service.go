@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"time"
@@ -11,11 +12,13 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 )
 
 type ShopService struct {
 	shopRepository *repository.ShopRepository
+	recommendStore *cache.ShopRecommendStore
 }
 
 type PeripheralListInput struct {
@@ -46,9 +49,10 @@ type SavePeripheralSKUInput struct {
 	Status     int
 }
 
-func NewShopService(shopRepository *repository.ShopRepository) *ShopService {
+func NewShopService(shopRepository *repository.ShopRepository, recommendStore *cache.ShopRecommendStore) *ShopService {
 	return &ShopService{
 		shopRepository: shopRepository,
+		recommendStore: recommendStore,
 	}
 }
 
@@ -70,12 +74,12 @@ func (s *ShopService) LoadPeripheral(ctx context.Context, input PeripheralListIn
 
 func (s *ShopService) GetPeripheral(ctx context.Context, productID uint64) (*domain.AdminPeripheralItem, error) {
 	if productID == 0 {
-		return nil, &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
+		return nil, &BusinessError{Info: "参数错误"}
 	}
 
 	item, err := s.shopRepository.FindPeripheralDetail(ctx, productID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, &BusinessError{Info: "\u5468\u8fb9\u5546\u54c1\u4e0d\u5b58\u5728"}
+		return nil, &BusinessError{Info: "周边商品不存在"}
 	}
 	if err != nil {
 		return nil, err
@@ -91,18 +95,18 @@ func (s *ShopService) SavePeripheral(ctx context.Context, input SavePeripheralIn
 	input.SaleStartTime = strings.TrimSpace(input.SaleStartTime)
 
 	if input.ProductName == "" {
-		return &BusinessError{Info: "\u8bf7\u8f93\u5165\u5546\u54c1\u540d\u79f0"}
+		return &BusinessError{Info: "请输入商品名称"}
 	}
 	if len([]rune(input.ProductName)) > 100 {
-		return &BusinessError{Info: "\u5546\u54c1\u540d\u79f0\u4e0d\u80fd\u8d85\u8fc7100\u4e2a\u5b57"}
+		return &BusinessError{Info: "商品名称不能超过100个字"}
 	}
 	if !isValidCommonStatus(input.Status) || !isValidRecommendStatus(input.RecommendStatus) || input.Sort < 0 {
-		return &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
+		return &BusinessError{Info: "参数错误"}
 	}
 
 	saleStartTime, err := parseAdminDateTime(input.SaleStartTime)
 	if err != nil {
-		return &BusinessError{Info: "\u5f00\u552e\u65f6\u95f4\u683c\u5f0f\u4e0d\u6b63\u786e"}
+		return &BusinessError{Info: "开售时间格式不正确"}
 	}
 
 	skuList, businessError := normalizeSavePeripheralSKUList(input.SkuList)
@@ -122,20 +126,25 @@ func (s *ShopService) SavePeripheral(ctx context.Context, input SavePeripheralIn
 		SkuList:         skuList,
 	})
 	if errors.Is(err, repository.ErrStockLessThanOccupied) {
-		return &BusinessError{Info: "\u603b\u5e93\u5b58\u4e0d\u80fd\u5c0f\u4e8e\u5df2\u552e\u5e93\u5b58\u548c\u9501\u5b9a\u5e93\u5b58\u4e4b\u548c"}
+		return &BusinessError{Info: "总库存不能小于已售库存和锁定库存之和"}
 	}
 	if errors.Is(err, repository.ErrPriceChangeTooEarly) {
-		return &BusinessError{Info: "\u5df2\u4e0a\u67b6\u5546\u54c1\u9700\u5148\u4e0b\u67b6\uff0c\u4e14\u4e0b\u67b6\u6ee130\u5206\u949f\u540e\u624d\u80fd\u4fee\u6539\u4ef7\u683c"}
+		return &BusinessError{Info: "已上架商品需先下架，且下架满30分钟后才能修改价格或新增规格"}
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return &BusinessError{Info: "\u5468\u8fb9\u5546\u54c1\u4e0d\u5b58\u5728"}
+		return &BusinessError{Info: "周边商品不存在"}
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	s.deleteHotPeripheralRecommendCache(ctx)
+	return nil
 }
 
 func (s *ShopService) ChangePeripheralStatus(ctx context.Context, productID uint64, status int) error {
 	if productID == 0 || !isValidCommonStatus(status) {
-		return &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
+		return &BusinessError{Info: "参数错误"}
 	}
 
 	rowsAffected, err := s.shopRepository.ChangePeripheralStatus(ctx, productID, status)
@@ -143,9 +152,20 @@ func (s *ShopService) ChangePeripheralStatus(ctx context.Context, productID uint
 		return err
 	}
 	if rowsAffected == 0 {
-		return &BusinessError{Info: "\u5468\u8fb9\u5546\u54c1\u4e0d\u5b58\u5728"}
+		return &BusinessError{Info: "周边商品不存在"}
 	}
+
+	s.deleteHotPeripheralRecommendCache(ctx)
 	return nil
+}
+
+func (s *ShopService) deleteHotPeripheralRecommendCache(ctx context.Context) {
+	if s.recommendStore == nil {
+		return
+	}
+	if err := s.recommendStore.DeleteHotPeripheral(ctx); err != nil {
+		log.Printf("delete hot peripheral recommend cache: %v", err)
+	}
 }
 
 func normalizePeripheralListInput(input PeripheralListInput) PeripheralListInput {
@@ -245,19 +265,19 @@ func fillPeripheralName(item *domain.AdminPeripheralItem) {
 		return
 	}
 	if item.Status == domain.ProductStatusOnShelf {
-		item.StatusName = "\u5df2\u4e0a\u67b6"
+		item.StatusName = "已上架"
 	} else {
-		item.StatusName = "\u5df2\u4e0b\u67b6"
+		item.StatusName = "已下架"
 	}
 	switch item.SaleStatus {
 	case domain.SaleStatusPending:
-		item.SaleStatusName = "\u5f85\u5f00\u552e"
+		item.SaleStatusName = "待开售"
 	case domain.SaleStatusOnSale:
-		item.SaleStatusName = "\u5728\u552e"
+		item.SaleStatusName = "在售"
 	case domain.SaleStatusSoldOut:
-		item.SaleStatusName = "\u5df2\u552e\u7f44"
+		item.SaleStatusName = "已售罄"
 	default:
-		item.SaleStatusName = "\u5df2\u4e0b\u67b6"
+		item.SaleStatusName = "已下架"
 	}
 	if item.SkuName == "" {
 		item.SkuName = "默认规格"
@@ -293,5 +313,5 @@ func buildPriceText(minPrice float64, maxPrice float64) string {
 }
 
 func formatMoney(value float64) string {
-	return "￥" + strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", value), "0"), ".")
+	return "¥" + strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", value), "0"), ".")
 }

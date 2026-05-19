@@ -5,6 +5,7 @@ import (
 
 	webhandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler/web"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/middleware"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 	webservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/web"
 )
@@ -19,7 +20,8 @@ func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	categoryHandler := webhandler.NewCategoryHandler(categoryService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
-	shopService := webservice.NewShopService(shopRepository)
+	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache)
+	shopService := webservice.NewShopService(shopRepository, shopRecommendStore)
 	shopHandler := webhandler.NewShopHandler(shopService)
 
 	accountGroup := group.Group("/account")

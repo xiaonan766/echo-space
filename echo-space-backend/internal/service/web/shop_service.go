@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 )
 
@@ -24,6 +27,8 @@ const (
 
 type ShopService struct {
 	shopRepository *repository.ShopRepository
+	recommendStore *cache.ShopRecommendStore
+	recommendMu    sync.Mutex
 }
 
 type ShopListInput struct {
@@ -33,9 +38,10 @@ type ShopListInput struct {
 	PageSize int
 }
 
-func NewShopService(shopRepository *repository.ShopRepository) *ShopService {
+func NewShopService(shopRepository *repository.ShopRepository, recommendStore *cache.ShopRecommendStore) *ShopService {
 	return &ShopService{
 		shopRepository: shopRepository,
+		recommendStore: recommendStore,
 	}
 }
 
@@ -45,11 +51,23 @@ func (s *ShopService) LoadRecommend(ctx context.Context, itemType string) ([]dom
 		return []domain.WebShopItem{}, nil
 	}
 
+	if list, ok := s.getCachedHotPeripheral(ctx); ok {
+		return list, nil
+	}
+
+	s.recommendMu.Lock()
+	defer s.recommendMu.Unlock()
+
+	if list, ok := s.getCachedHotPeripheral(ctx); ok {
+		return list, nil
+	}
+
 	list, err := s.shopRepository.ListRecommendedPeripheralForWeb(ctx, defaultRecommendSize)
 	if err != nil {
 		return nil, err
 	}
 	fillWebShopItems(list)
+	s.saveCachedHotPeripheral(ctx, list)
 	return list, nil
 }
 
@@ -85,6 +103,29 @@ func (s *ShopService) GetPeripheralDetail(ctx context.Context, productID uint64)
 	}
 	fillWebShopItem(item)
 	return item, nil
+}
+
+func (s *ShopService) getCachedHotPeripheral(ctx context.Context) ([]domain.WebShopItem, bool) {
+	if s.recommendStore == nil {
+		return nil, false
+	}
+
+	list, ok, err := s.recommendStore.GetHotPeripheral(ctx)
+	if err != nil {
+		log.Printf("get hot peripheral recommend cache: %v", err)
+		return nil, false
+	}
+	return list, ok
+}
+
+func (s *ShopService) saveCachedHotPeripheral(ctx context.Context, list []domain.WebShopItem) {
+	if s.recommendStore == nil {
+		return
+	}
+
+	if err := s.recommendStore.SaveHotPeripheral(ctx, list); err != nil {
+		log.Printf("save hot peripheral recommend cache: %v", err)
+	}
 }
 
 func normalizeShopListInput(input ShopListInput) ShopListInput {
@@ -176,5 +217,5 @@ func buildWebPriceText(minPrice float64, maxPrice float64) string {
 }
 
 func formatWebMoney(value float64) string {
-	return "￥" + strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", value), "0"), ".")
+	return "¥" + strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", value), "0"), ".")
 }

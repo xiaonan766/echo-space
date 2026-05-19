@@ -6,6 +6,7 @@ import (
 	filehandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler"
 	adminhandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler/admin"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/middleware"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 	adminservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/admin"
 )
@@ -27,7 +28,8 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	interactService := adminservice.NewInteractService(interactRepository)
 	interactHandler := adminhandler.NewInteractHandler(interactService)
 	shopRepository := repository.NewShopRepository(deps.DB)
-	shopService := adminservice.NewShopService(shopRepository)
+	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache)
+	shopService := adminservice.NewShopService(shopRepository, shopRecommendStore)
 	shopHandler := adminhandler.NewShopHandler(shopService)
 	fileHandler := filehandler.NewFileHandler(deps.Config.File)
 
