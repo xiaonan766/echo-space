@@ -138,7 +138,11 @@ func (s *ShopService) SavePeripheral(ctx context.Context, input SavePeripheralIn
 		return err
 	}
 
-	s.deleteHotPeripheralRecommendCache(ctx)
+	if input.ProductID > 0 {
+		s.deletePeripheralShopCache(ctx, input.ProductID, input.Status == domain.ProductStatusOffShelf)
+	} else {
+		s.deleteHotPeripheralRecommendCache(ctx)
+	}
 	return nil
 }
 
@@ -155,8 +159,23 @@ func (s *ShopService) ChangePeripheralStatus(ctx context.Context, productID uint
 		return &BusinessError{Info: "周边商品不存在"}
 	}
 
-	s.deleteHotPeripheralRecommendCache(ctx)
+	s.deletePeripheralShopCache(ctx, productID, status == domain.ProductStatusOffShelf)
 	return nil
+}
+
+func (s *ShopService) deletePeripheralShopCache(ctx context.Context, productID uint64, deleteHotMarker bool) {
+	s.deleteHotPeripheralRecommendCache(ctx)
+	if s.recommendStore == nil || productID == 0 {
+		return
+	}
+	if err := s.recommendStore.DeletePeripheralDetail(ctx, productID); err != nil {
+		log.Printf("delete peripheral detail cache: productID=%d err=%v", productID, err)
+	}
+	if deleteHotMarker {
+		if err := s.recommendStore.DeleteHotPeripheralMarker(ctx, productID); err != nil {
+			log.Printf("delete hot peripheral marker: productID=%d err=%v", productID, err)
+		}
+	}
 }
 
 func (s *ShopService) deleteHotPeripheralRecommendCache(ctx context.Context) {

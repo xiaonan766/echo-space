@@ -20,7 +20,7 @@ func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	categoryHandler := webhandler.NewCategoryHandler(categoryService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
-	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache)
+	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
 	shopService := webservice.NewShopService(shopRepository, shopRecommendStore)
 	shopHandler := webhandler.NewShopHandler(shopService)
 

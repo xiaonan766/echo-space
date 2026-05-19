@@ -29,6 +29,7 @@ type ShopService struct {
 	shopRepository *repository.ShopRepository
 	recommendStore *cache.ShopRecommendStore
 	recommendMu    sync.Mutex
+	detailLocks    sync.Map
 }
 
 type ShopListInput struct {
@@ -94,6 +95,20 @@ func (s *ShopService) GetPeripheralDetail(ctx context.Context, productID uint64)
 		return nil, &BusinessError{Info: "参数错误"}
 	}
 
+	isHot := s.trackPeripheralVisit(ctx, productID) || s.isHotPeripheral(ctx, productID)
+	if item, ok := s.getCachedPeripheralDetail(ctx, productID, isHot); ok {
+		return item, nil
+	}
+
+	detailLock := s.getDetailLock(productID)
+	detailLock.Lock()
+	defer detailLock.Unlock()
+
+	isHot = isHot || s.isHotPeripheral(ctx, productID)
+	if item, ok := s.getCachedPeripheralDetail(ctx, productID, isHot); ok {
+		return item, nil
+	}
+
 	item, err := s.shopRepository.FindWebPeripheralDetail(ctx, productID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, &BusinessError{Info: "周边商品不存在或已下架"}
@@ -102,6 +117,7 @@ func (s *ShopService) GetPeripheralDetail(ctx context.Context, productID uint64)
 		return nil, err
 	}
 	fillWebShopItem(item)
+	s.saveCachedPeripheralDetail(ctx, productID, item, isHot)
 	return item, nil
 }
 
@@ -126,6 +142,45 @@ func (s *ShopService) saveCachedHotPeripheral(ctx context.Context, list []domain
 	if err := s.recommendStore.SaveHotPeripheral(ctx, list); err != nil {
 		log.Printf("save hot peripheral recommend cache: %v", err)
 	}
+}
+
+func (s *ShopService) trackPeripheralVisit(ctx context.Context, productID uint64) bool {
+	if s.recommendStore == nil {
+		return false
+	}
+	return s.recommendStore.TrackPeripheralVisit(ctx, productID)
+}
+
+func (s *ShopService) isHotPeripheral(ctx context.Context, productID uint64) bool {
+	return s.recommendStore != nil && s.recommendStore.IsHotPeripheral(ctx, productID)
+}
+
+func (s *ShopService) getCachedPeripheralDetail(ctx context.Context, productID uint64, hot bool) (*domain.WebShopItem, bool) {
+	if s.recommendStore == nil {
+		return nil, false
+	}
+
+	item, ok, err := s.recommendStore.GetPeripheralDetail(ctx, productID, hot)
+	if err != nil {
+		log.Printf("get peripheral detail cache: productID=%d hot=%t err=%v", productID, hot, err)
+		return nil, false
+	}
+	return item, ok
+}
+
+func (s *ShopService) saveCachedPeripheralDetail(ctx context.Context, productID uint64, item *domain.WebShopItem, hot bool) {
+	if s.recommendStore == nil {
+		return
+	}
+
+	if err := s.recommendStore.SavePeripheralDetail(ctx, productID, item, hot); err != nil {
+		log.Printf("save peripheral detail cache: productID=%d hot=%t err=%v", productID, hot, err)
+	}
+}
+
+func (s *ShopService) getDetailLock(productID uint64) *sync.Mutex {
+	value, _ := s.detailLocks.LoadOrStore(productID, &sync.Mutex{})
+	return value.(*sync.Mutex)
 }
 
 func normalizeShopListInput(input ShopListInput) ShopListInput {

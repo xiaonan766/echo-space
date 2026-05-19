@@ -28,7 +28,7 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	interactService := adminservice.NewInteractService(interactRepository)
 	interactHandler := adminhandler.NewInteractHandler(interactService)
 	shopRepository := repository.NewShopRepository(deps.DB)
-	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache)
+	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
 	shopService := adminservice.NewShopService(shopRepository, shopRecommendStore)
 	shopHandler := adminhandler.NewShopHandler(shopService)
 	fileHandler := filehandler.NewFileHandler(deps.Config.File)
