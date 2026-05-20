@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -16,6 +17,11 @@ const (
 	RecoverWriteBack
 )
 
+type RecoveryHandler interface {
+	HandleDirtyWrite(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)
+	HandlePendingDelete(ctx context.Context, key string) (bool, error)
+}
+
 type HybridCache struct {
 	redisClient  *redis.Client
 	localCache   *LocalCache
@@ -28,6 +34,9 @@ type HybridCache struct {
 	nextRedisTry  time.Time
 	dirtyWrites   map[string]dirtyWrite
 	pendingDelete map[string]time.Time
+
+	recoveryMu      sync.RWMutex
+	recoveryHandler RecoveryHandler
 
 	stopCh chan struct{}
 	once   sync.Once
@@ -59,6 +68,12 @@ func (c *HybridCache) Close() {
 	c.once.Do(func() {
 		close(c.stopCh)
 	})
+}
+
+func (c *HybridCache) SetRecoveryHandler(handler RecoveryHandler) {
+	c.recoveryMu.Lock()
+	defer c.recoveryMu.Unlock()
+	c.recoveryHandler = handler
 }
 
 func (c *HybridCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration, policy RecoverPolicy) error {
@@ -116,6 +131,34 @@ func (c *HybridCache) Delete(ctx context.Context, key string, policy RecoverPoli
 		return nil
 	}
 
+	c.markRedisSuccess()
+	c.clearDirty(key)
+	return nil
+}
+
+func (c *HybridCache) SetRedis(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	if c == nil {
+		return errors.New("hybrid cache is nil")
+	}
+	if err := c.redisSet(ctx, key, value, ttl); err != nil {
+		c.markRedisFailure(err)
+		return err
+	}
+	c.localCache.Set(key, value, ttl)
+	c.markRedisSuccess()
+	c.clearDirty(key)
+	return nil
+}
+
+func (c *HybridCache) DeleteRedis(ctx context.Context, key string) error {
+	if c == nil {
+		return errors.New("hybrid cache is nil")
+	}
+	if err := c.redisDelete(ctx, key); err != nil {
+		c.markRedisFailure(err)
+		return err
+	}
+	c.localCache.Delete(key)
 	c.markRedisSuccess()
 	c.clearDirty(key)
 	return nil
@@ -241,8 +284,20 @@ func (c *HybridCache) pingAndRecover() {
 
 func (c *HybridCache) flushDirty() {
 	deletes, writes := c.snapshotDirty()
+	handler := c.getRecoveryHandler()
 
 	for key, updatedAt := range deletes {
+		if handler != nil {
+			handled, err := handler.HandlePendingDelete(context.Background(), key)
+			if err != nil {
+				log.Printf("publish cache delete recovery task failed, fallback to redis delete: key=%s err=%v", key, err)
+			}
+			if err == nil && handled {
+				c.removePendingDelete(key, updatedAt)
+				continue
+			}
+		}
+
 		if err := c.redisDelete(context.Background(), key); err != nil {
 			c.markRedisFailure(err)
 			return
@@ -257,12 +312,29 @@ func (c *HybridCache) flushDirty() {
 			continue
 		}
 
+		if handler != nil {
+			handled, err := handler.HandleDirtyWrite(context.Background(), key, item.value, ttl)
+			if err != nil {
+				log.Printf("publish cache recovery task failed, fallback to redis write: key=%s err=%v", key, err)
+			}
+			if err == nil && handled {
+				c.removeDirtyWrite(key, item.updatedAt)
+				continue
+			}
+		}
+
 		if err := c.redisSet(context.Background(), key, item.value, ttl); err != nil {
 			c.markRedisFailure(err)
 			return
 		}
 		c.removeDirtyWrite(key, item.updatedAt)
 	}
+}
+
+func (c *HybridCache) getRecoveryHandler() RecoveryHandler {
+	c.recoveryMu.RLock()
+	defer c.recoveryMu.RUnlock()
+	return c.recoveryHandler
 }
 
 func (c *HybridCache) snapshotDirty() (map[string]time.Time, map[string]dirtyWrite) {

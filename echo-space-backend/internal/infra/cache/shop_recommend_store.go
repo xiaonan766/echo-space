@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,7 +16,11 @@ import (
 )
 
 const (
-	hotPeripheralRecommendKey = "echo-space:shop:recommend:peripheral:hot:v1"
+	hotPeripheralRecommendKey    = "echo-space:shop:recommend:peripheral:hot:v1"
+	peripheralDetailKeyPrefix    = "echo-space:shop:peripheral:detail:"
+	hotPeripheralDetailKeyPrefix = "echo-space:shop:hot:peripheral:detail:"
+	hotPeripheralMarkerKeyPrefix = "echo-space:shop:hot:peripheral:"
+	hotPeripheralScoreKeyPrefix  = "echo-space:shop:hot:score:peripheral:"
 
 	shopRecommendTTL       = 5 * time.Minute
 	peripheralDetailTTL    = 45 * time.Second
@@ -73,6 +78,18 @@ func (s *ShopRecommendStore) SaveHotPeripheral(ctx context.Context, list []domai
 	return s.cache.Set(ctx, hotPeripheralRecommendKey, content, shopRecommendTTL, RecoverWriteBack)
 }
 
+func (s *ShopRecommendStore) SaveHotPeripheralToRedis(ctx context.Context, list []domain.WebShopItem) error {
+	if s == nil || s.cache == nil {
+		return nil
+	}
+
+	content, err := json.Marshal(list)
+	if err != nil {
+		return err
+	}
+	return s.cache.SetRedis(ctx, hotPeripheralRecommendKey, content, shopRecommendTTL)
+}
+
 func (s *ShopRecommendStore) DeleteHotPeripheral(ctx context.Context) error {
 	if s == nil || s.cache == nil {
 		return nil
@@ -118,6 +135,25 @@ func (s *ShopRecommendStore) SavePeripheralDetail(ctx context.Context, productID
 	return s.cache.Set(ctx, key, content, ttl, RecoverWriteBack)
 }
 
+func (s *ShopRecommendStore) SavePeripheralDetailToRedis(ctx context.Context, productID uint64, item *domain.WebShopItem, hot bool) error {
+	if s == nil || s.cache == nil || productID == 0 || item == nil {
+		return nil
+	}
+
+	content, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+
+	key := peripheralDetailKey(productID)
+	ttl := peripheralDetailTTL
+	if hot {
+		key = hotPeripheralDetailKey(productID)
+		ttl = hotPeripheralDetailTTL
+	}
+	return s.cache.SetRedis(ctx, key, content, ttl)
+}
+
 func (s *ShopRecommendStore) DeletePeripheralDetail(ctx context.Context, productID uint64) error {
 	if s == nil || s.cache == nil || productID == 0 {
 		return nil
@@ -127,6 +163,17 @@ func (s *ShopRecommendStore) DeletePeripheralDetail(ctx context.Context, product
 		return err
 	}
 	return s.cache.Delete(ctx, hotPeripheralDetailKey(productID), RecoverWriteBack)
+}
+
+func (s *ShopRecommendStore) DeletePeripheralDetailFromRedis(ctx context.Context, productID uint64) error {
+	if s == nil || s.cache == nil || productID == 0 {
+		return nil
+	}
+
+	if err := s.cache.DeleteRedis(ctx, peripheralDetailKey(productID)); err != nil {
+		return err
+	}
+	return s.cache.DeleteRedis(ctx, hotPeripheralDetailKey(productID))
 }
 
 func (s *ShopRecommendStore) IsHotPeripheral(ctx context.Context, productID uint64) bool {
@@ -145,11 +192,38 @@ func (s *ShopRecommendStore) MarkHotPeripheral(ctx context.Context, productID ui
 	return s.cache.Set(ctx, hotPeripheralMarkerKey(productID), []byte("1"), hotPeripheralMarkerTTL, RecoverWriteBack)
 }
 
+func (s *ShopRecommendStore) RestoreHotPeripheralMarker(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	if s == nil || s.cache == nil || key == "" || len(value) == 0 {
+		return nil
+	}
+	if !strings.HasPrefix(key, hotPeripheralMarkerKeyPrefix) || strings.HasPrefix(key, hotPeripheralDetailKeyPrefix) {
+		return nil
+	}
+	return s.cache.Set(ctx, key, value, ttl, RecoverWriteBack)
+}
+
+func (s *ShopRecommendStore) RestoreHotPeripheralMarkerToRedis(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	if s == nil || s.cache == nil || key == "" || len(value) == 0 {
+		return nil
+	}
+	if !strings.HasPrefix(key, hotPeripheralMarkerKeyPrefix) || strings.HasPrefix(key, hotPeripheralDetailKeyPrefix) {
+		return nil
+	}
+	return s.cache.SetRedis(ctx, key, value, ttl)
+}
+
 func (s *ShopRecommendStore) DeleteHotPeripheralMarker(ctx context.Context, productID uint64) error {
 	if s == nil || s.cache == nil || productID == 0 {
 		return nil
 	}
 	return s.cache.Delete(ctx, hotPeripheralMarkerKey(productID), RecoverWriteBack)
+}
+
+func (s *ShopRecommendStore) DeleteShopCacheKeyFromRedis(ctx context.Context, key string) error {
+	if s == nil || s.cache == nil || !isShopCacheRecoveryKey(key) {
+		return nil
+	}
+	return s.cache.DeleteRedis(ctx, key)
 }
 
 func (s *ShopRecommendStore) TrackPeripheralVisit(ctx context.Context, productID uint64) bool {
@@ -256,17 +330,24 @@ func (s *ShopRecommendStore) trackPeripheralVisitInLocal(productID uint64) int {
 }
 
 func hotPeripheralScoreKey(value time.Time) string {
-	return "echo-space:shop:hot:score:peripheral:" + value.Format("200601021504")
+	return hotPeripheralScoreKeyPrefix + value.Format("200601021504")
 }
 
 func peripheralDetailKey(productID uint64) string {
-	return fmt.Sprintf("echo-space:shop:peripheral:detail:%d", productID)
+	return fmt.Sprintf("%s%d", peripheralDetailKeyPrefix, productID)
 }
 
 func hotPeripheralDetailKey(productID uint64) string {
-	return fmt.Sprintf("echo-space:shop:hot:peripheral:detail:%d", productID)
+	return fmt.Sprintf("%s%d", hotPeripheralDetailKeyPrefix, productID)
 }
 
 func hotPeripheralMarkerKey(productID uint64) string {
-	return fmt.Sprintf("echo-space:shop:hot:peripheral:%d", productID)
+	return fmt.Sprintf("%s%d", hotPeripheralMarkerKeyPrefix, productID)
+}
+
+func isShopCacheRecoveryKey(key string) bool {
+	return key == hotPeripheralRecommendKey ||
+		strings.HasPrefix(key, peripheralDetailKeyPrefix) ||
+		strings.HasPrefix(key, hotPeripheralDetailKeyPrefix) ||
+		strings.HasPrefix(key, hotPeripheralMarkerKeyPrefix)
 }

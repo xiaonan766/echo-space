@@ -13,11 +13,12 @@ import (
 )
 
 type Config struct {
-	Server ServerConfig `yaml:"server"`
-	Redis  RedisConfig  `yaml:"redis"`
-	MySQL  MySQLConfig  `yaml:"mysql"`
-	Admin  AdminConfig  `yaml:"admin"`
-	File   FileConfig   `yaml:"file"`
+	Server   ServerConfig   `yaml:"server"`
+	Redis    RedisConfig    `yaml:"redis"`
+	MySQL    MySQLConfig    `yaml:"mysql"`
+	RabbitMQ RabbitMQConfig `yaml:"rabbitmq"`
+	Admin    AdminConfig    `yaml:"admin"`
+	File     FileConfig     `yaml:"file"`
 }
 
 type ServerConfig struct {
@@ -54,6 +55,12 @@ func (c MySQLConfig) ConnMaxLifetimeDuration() time.Duration {
 		return time.Hour
 	}
 	return duration
+}
+
+type RabbitMQConfig struct {
+	URL                string `yaml:"url"`
+	CacheRecoveryQueue string `yaml:"cacheRecoveryQueue"`
+	PrefetchCount      int    `yaml:"prefetchCount"`
 }
 
 type AdminConfig struct {
@@ -103,6 +110,11 @@ func defaultConfig() Config {
 			MaxOpenConns:    20,
 			ConnMaxLifetime: "1h",
 			AutoMigrate:     false,
+		},
+		RabbitMQ: RabbitMQConfig{
+			URL:                "amqp://guest:guest@localhost:5672/",
+			CacheRecoveryQueue: "echo-space.shop.cache.recovery",
+			PrefetchCount:      20,
 		},
 		Admin: AdminConfig{
 			Account:  "admin",
@@ -165,6 +177,10 @@ func applyEnvOverrides(cfg *Config) {
 	cfg.MySQL.MaxOpenConns = envInt("MYSQL_MAX_OPEN_CONNS", cfg.MySQL.MaxOpenConns)
 	cfg.MySQL.ConnMaxLifetime = envString("MYSQL_CONN_MAX_LIFETIME", cfg.MySQL.ConnMaxLifetime)
 	cfg.MySQL.AutoMigrate = envBool("MYSQL_AUTO_MIGRATE", cfg.MySQL.AutoMigrate)
+
+	cfg.RabbitMQ.URL = envString("RABBITMQ_URL", cfg.RabbitMQ.URL)
+	cfg.RabbitMQ.CacheRecoveryQueue = envString("RABBITMQ_CACHE_RECOVERY_QUEUE", cfg.RabbitMQ.CacheRecoveryQueue)
+	cfg.RabbitMQ.PrefetchCount = envInt("RABBITMQ_PREFETCH_COUNT", cfg.RabbitMQ.PrefetchCount)
 
 	cfg.Admin.Account = envString("ADMIN_ACCOUNT", cfg.Admin.Account)
 	cfg.Admin.Password = envString("ADMIN_PASSWORD", cfg.Admin.Password)
