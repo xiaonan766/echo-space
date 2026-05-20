@@ -27,6 +27,7 @@ type App struct {
 	rabbit                    *mq.RabbitClient
 	shopCacheRecoveryConsumer *mq.ShopCacheRecoveryConsumer
 	shopStockLockConsumer     *mq.ShopStockLockConsumer
+	backgroundCancel          context.CancelFunc
 	router                    http.Handler
 }
 
@@ -56,6 +57,8 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	rabbitClient := setupRabbit(ctx, cfg)
 	shopCacheRecoveryConsumer := setupShopCacheRecovery(ctx, cfg, hybridCache, redisClient, mysqlDB, rabbitClient)
 	stockLockPublisher, shopStockLockConsumer := setupShopStockLock(ctx, cfg, redisClient, mysqlDB, rabbitClient)
+	backgroundCtx, backgroundCancel := context.WithCancel(context.Background())
+	setupShopOrderRecovery(backgroundCtx, redisClient, mysqlDB, stockLockPublisher)
 
 	router := approuter.New(approuter.Dependencies{
 		Config:             cfg,
@@ -73,6 +76,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		rabbit:                    rabbitClient,
 		shopCacheRecoveryConsumer: shopCacheRecoveryConsumer,
 		shopStockLockConsumer:     shopStockLockConsumer,
+		backgroundCancel:          backgroundCancel,
 		router:                    router,
 	}, nil
 }
@@ -82,6 +86,9 @@ func (a *App) Router() http.Handler {
 }
 
 func (a *App) Close() {
+	if a.backgroundCancel != nil {
+		a.backgroundCancel()
+	}
 	if a.shopStockLockConsumer != nil {
 		a.shopStockLockConsumer.Close()
 	}
@@ -162,4 +169,13 @@ func setupShopStockLock(ctx context.Context, cfg config.Config, redisClient *red
 	publisher := mq.NewShopStockLockPublisher(rabbitClient, cfg.RabbitMQ.StockLockQueue)
 	log.Printf("shop stock lock consumer started, queue=%s", cfg.RabbitMQ.StockLockQueue)
 	return publisher, consumer
+}
+
+func setupShopOrderRecovery(ctx context.Context, redisClient *redis.Client, mysqlDB *gorm.DB, stockLockPublisher *mq.ShopStockLockPublisher) {
+	shopRepository := repository.NewShopRepository(mysqlDB)
+	orderRepository := repository.NewShopOrderRepository(mysqlDB)
+	stockStore := cache.NewShopStockStore(redisClient)
+	orderService := webservice.NewShopOrderService(shopRepository, orderRepository, stockStore, stockLockPublisher)
+	orderService.StartRecoveryTasks(ctx)
+	log.Printf("shop order recovery tasks started")
 }

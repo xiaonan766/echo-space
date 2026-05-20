@@ -18,17 +18,18 @@ type ShopOrderRepository struct {
 }
 
 type CreateShopOrderData struct {
-	OrderNo       string
-	UserID        string
-	ProductID     uint64
-	SkuID         uint64
-	ProductName   string
-	SkuName       string
-	CoverURL      string
-	Price         float64
-	BuyCount      int
-	TotalAmount   float64
-	ExpireMinutes int
+	OrderNo        string
+	UserID         string
+	ProductID      uint64
+	SkuID          uint64
+	ProductName    string
+	SkuName        string
+	CoverURL       string
+	Price          float64
+	BuyCount       int
+	TotalAmount    float64
+	ExpireMinutes  int
+	MessagePayload string
 }
 
 func NewShopOrderRepository(db *gorm.DB) *ShopOrderRepository {
@@ -64,8 +65,116 @@ func (r *ShopOrderRepository) CreatePendingOrder(ctx context.Context, data Creat
 			Quantity:    data.BuyCount,
 			TotalAmount: data.TotalAmount,
 		}
-		return tx.Create(item).Error
+		if err := tx.Create(item).Error; err != nil {
+			return err
+		}
+
+		nextRetryTime := time.Now()
+		payload := data.MessagePayload
+		if payload == "" {
+			payload = "{}"
+		}
+		message := &domain.ShopOrderMessage{
+			OrderNo:       data.OrderNo,
+			MessageType:   domain.OrderMessageTypeStockLock,
+			MessageStatus: domain.OrderMessageStatusWaitPublish,
+			Payload:       payload,
+			NextRetryTime: &nextRetryTime,
+		}
+		return tx.Create(message).Error
 	})
+}
+
+func (r *ShopOrderRepository) MarkStockLockMessagePublished(ctx context.Context, orderNo string, nextRetryTime time.Time) error {
+	return r.db.WithContext(ctx).Model(&domain.ShopOrderMessage{}).
+		Where("order_no = ? AND message_type = ? AND message_status IN ?", orderNo, domain.OrderMessageTypeStockLock, []int{
+			domain.OrderMessageStatusWaitPublish,
+			domain.OrderMessageStatusPublished,
+		}).
+		Updates(map[string]any{
+			"message_status":  domain.OrderMessageStatusPublished,
+			"retry_count":     gorm.Expr("retry_count + ?", 1),
+			"next_retry_time": nextRetryTime,
+			"last_error":      "",
+		}).Error
+}
+
+func (r *ShopOrderRepository) MarkStockLockMessageConsumedSuccess(ctx context.Context, orderNo string) error {
+	return r.db.WithContext(ctx).Model(&domain.ShopOrderMessage{}).
+		Where("order_no = ? AND message_type = ?", orderNo, domain.OrderMessageTypeStockLock).
+		Updates(map[string]any{
+			"message_status":  domain.OrderMessageStatusConsumedSuccess,
+			"next_retry_time": nil,
+			"last_error":      "",
+		}).Error
+}
+
+func (r *ShopOrderRepository) MarkStockLockMessageConsumedFailed(ctx context.Context, orderNo string, lastError string) error {
+	return r.db.WithContext(ctx).Model(&domain.ShopOrderMessage{}).
+		Where("order_no = ? AND message_type = ?", orderNo, domain.OrderMessageTypeStockLock).
+		Updates(map[string]any{
+			"message_status":  domain.OrderMessageStatusConsumedFailed,
+			"next_retry_time": nil,
+			"last_error":      trimMessageError(lastError),
+		}).Error
+}
+
+func (r *ShopOrderRepository) DelayStockLockMessageRetryByID(ctx context.Context, messageID uint64, nextRetryTime time.Time, lastError string, dead bool) error {
+	var status any = gorm.Expr("message_status")
+	if dead {
+		status = domain.OrderMessageStatusDead
+	}
+	return r.db.WithContext(ctx).Model(&domain.ShopOrderMessage{}).
+		Where("message_id = ? AND message_type = ?", messageID, domain.OrderMessageTypeStockLock).
+		Updates(map[string]any{
+			"message_status":  status,
+			"retry_count":     gorm.Expr("retry_count + ?", 1),
+			"next_retry_time": nextRetryTime,
+			"last_error":      trimMessageError(lastError),
+		}).Error
+}
+
+func (r *ShopOrderRepository) DelayStockLockMessageRetryByOrderNo(ctx context.Context, orderNo string, nextRetryTime time.Time, lastError string, dead bool) error {
+	var status any = gorm.Expr("message_status")
+	if dead {
+		status = domain.OrderMessageStatusDead
+	}
+	return r.db.WithContext(ctx).Model(&domain.ShopOrderMessage{}).
+		Where("order_no = ? AND message_type = ?", orderNo, domain.OrderMessageTypeStockLock).
+		Updates(map[string]any{
+			"message_status":  status,
+			"retry_count":     gorm.Expr("retry_count + ?", 1),
+			"next_retry_time": nextRetryTime,
+			"last_error":      trimMessageError(lastError),
+		}).Error
+}
+
+func (r *ShopOrderRepository) ListStockLockMessagesForRetry(ctx context.Context, limit int) ([]domain.ShopOrderMessage, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var list []domain.ShopOrderMessage
+	err := r.db.WithContext(ctx).
+		Where("message_type = ? AND message_status IN ?", domain.OrderMessageTypeStockLock, []int{
+			domain.OrderMessageStatusWaitPublish,
+			domain.OrderMessageStatusPublished,
+		}).
+		Where("next_retry_time IS NULL OR next_retry_time <= ?", time.Now()).
+		Order("message_id asc").
+		Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
+func (r *ShopOrderRepository) FindStockLockMessageByOrderNo(ctx context.Context, orderNo string) (*domain.ShopOrderMessage, error) {
+	var message domain.ShopOrderMessage
+	err := r.db.WithContext(ctx).
+		Where("order_no = ? AND message_type = ?", orderNo, domain.OrderMessageTypeStockLock).
+		Take(&message).Error
+	if err != nil {
+		return nil, err
+	}
+	return &message, nil
 }
 
 func (r *ShopOrderRepository) LockOrderStock(ctx context.Context, orderNo string, skuID uint64, buyCount int) error {
@@ -152,6 +261,15 @@ func (r *ShopOrderRepository) MarkOrderStockFailed(ctx context.Context, orderNo 
 	})
 }
 
+func (r *ShopOrderRepository) FindOrderByNo(ctx context.Context, orderNo string) (*domain.ShopOrder, error) {
+	var order domain.ShopOrder
+	err := r.db.WithContext(ctx).Where("order_no = ?", orderNo).Take(&order).Error
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
 func (r *ShopOrderRepository) FindOrderByNoAndUser(ctx context.Context, orderNo string, userID string) (*domain.WebShopOrderItem, error) {
 	var item domain.WebShopOrderItem
 	err := r.orderListQuery(ctx).
@@ -216,4 +334,11 @@ func nowAddMinutes(minutes int) time.Time {
 		minutes = 15
 	}
 	return time.Now().Add(time.Duration(minutes) * time.Minute)
+}
+
+func trimMessageError(message string) string {
+	if len(message) <= 500 {
+		return message
+	}
+	return message[:500]
 }

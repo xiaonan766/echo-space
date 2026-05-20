@@ -10,6 +10,14 @@ const (
 	PayStatusUnpaid = 0
 
 	StockFlowTypeLock = 1
+
+	OrderMessageTypeStockLock = 1
+
+	OrderMessageStatusWaitPublish     = 0
+	OrderMessageStatusPublished       = 1
+	OrderMessageStatusConsumedSuccess = 2
+	OrderMessageStatusConsumedFailed  = 3
+	OrderMessageStatusDead            = 4
 )
 
 type ShopOrder struct {
@@ -69,6 +77,23 @@ type ShopStockFlow struct {
 
 func (ShopStockFlow) TableName() string {
 	return "shop_stock_flow"
+}
+
+type ShopOrderMessage struct {
+	MessageID     uint64     `gorm:"primaryKey;autoIncrement;column:message_id" json:"messageId"`
+	OrderNo       string     `gorm:"column:order_no;type:varchar(32);not null" json:"orderNo"`
+	MessageType   int        `gorm:"column:message_type;type:tinyint;not null" json:"messageType"`
+	MessageStatus int        `gorm:"column:message_status;type:tinyint;not null" json:"messageStatus"`
+	Payload       string     `gorm:"column:payload;type:json;not null" json:"payload"`
+	RetryCount    int        `gorm:"column:retry_count;not null;default:0" json:"retryCount"`
+	NextRetryTime *time.Time `gorm:"column:next_retry_time" json:"nextRetryTime"`
+	LastError     string     `gorm:"column:last_error;type:varchar(500)" json:"lastError"`
+	CreateTime    time.Time  `gorm:"column:create_time;autoCreateTime" json:"createTime"`
+	UpdateTime    time.Time  `gorm:"column:update_time;autoUpdateTime" json:"updateTime"`
+}
+
+func (ShopOrderMessage) TableName() string {
+	return "shop_order_message"
 }
 
 type WebShopOrderItem struct {

@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -24,6 +25,11 @@ const (
 	defaultOrderPageSize      = 10
 	maxOrderPageSize          = 50
 	defaultOrderExpireMinutes = 15
+	orderMessageRetryDelay    = 30 * time.Second
+	orderMessageRetryInterval = 5 * time.Second
+	orderReservationInterval  = 30 * time.Second
+	orderRecoveryBatchSize    = 100
+	maxOrderMessageRetryCount = 10
 	defaultOrderSkuName       = "默认规格"
 )
 
@@ -105,25 +111,6 @@ func (s *ShopOrderService) CreateOrder(ctx context.Context, input CreateShopOrde
 		return nil, &BusinessError{Info: "抢购失败，请稍后重试"}
 	}
 
-	totalAmount := roundMoney(skuInfo.Price * float64(input.BuyCount))
-	if err := s.orderRepository.CreatePendingOrder(ctx, repository.CreateShopOrderData{
-		OrderNo:       orderNo,
-		UserID:        input.UserID,
-		ProductID:     skuInfo.ProductID,
-		SkuID:         skuInfo.SkuID,
-		ProductName:   skuInfo.ProductName,
-		SkuName:       normalizeOrderSkuName(skuInfo.SkuName),
-		CoverURL:      skuInfo.CoverURL,
-		Price:         skuInfo.Price,
-		BuyCount:      input.BuyCount,
-		TotalAmount:   totalAmount,
-		ExpireMinutes: defaultOrderExpireMinutes,
-	}); err != nil {
-		_ = s.stockStore.CompensateStock(context.Background(), input.SkuID, input.BuyCount)
-		_ = s.stockStore.DeleteRequest(context.Background(), input.UserID, input.RequestID)
-		return nil, err
-	}
-
 	message := mq.ShopStockLockMessage{
 		MessageID: orderNo,
 		OrderNo:   orderNo,
@@ -132,12 +119,40 @@ func (s *ShopOrderService) CreateOrder(ctx context.Context, input CreateShopOrde
 		SkuID:     input.SkuID,
 		BuyCount:  input.BuyCount,
 	}
-	if err := s.stockPublisher.PublishShopStockLockMessage(ctx, message); err != nil {
-		_ = s.orderRepository.MarkOrderStockFailed(context.Background(), orderNo)
-		_ = s.stockStore.CompensateStock(context.Background(), input.SkuID, input.BuyCount)
+	messagePayload, err := json.Marshal(message)
+	if err != nil {
+		_ = s.stockStore.ReleaseReservation(context.Background(), orderNo)
 		_ = s.stockStore.DeleteRequest(context.Background(), input.UserID, input.RequestID)
-		log.Printf("publish shop stock lock message failed: orderNo=%s err=%v", orderNo, err)
-		return nil, &BusinessError{Info: "抢购请求提交失败，请稍后重试"}
+		return nil, err
+	}
+
+	totalAmount := roundMoney(skuInfo.Price * float64(input.BuyCount))
+	if err := s.orderRepository.CreatePendingOrder(ctx, repository.CreateShopOrderData{
+		OrderNo:        orderNo,
+		UserID:         input.UserID,
+		ProductID:      skuInfo.ProductID,
+		SkuID:          skuInfo.SkuID,
+		ProductName:    skuInfo.ProductName,
+		SkuName:        normalizeOrderSkuName(skuInfo.SkuName),
+		CoverURL:       skuInfo.CoverURL,
+		Price:          skuInfo.Price,
+		BuyCount:       input.BuyCount,
+		TotalAmount:    totalAmount,
+		ExpireMinutes:  defaultOrderExpireMinutes,
+		MessagePayload: string(messagePayload),
+	}); err != nil {
+		_ = s.stockStore.ReleaseReservation(context.Background(), orderNo)
+		_ = s.stockStore.DeleteRequest(context.Background(), input.UserID, input.RequestID)
+		return nil, err
+	}
+
+	if err := s.stockStore.MarkReservationOrderCreated(context.Background(), orderNo); err != nil {
+		log.Printf("mark stock reservation order created failed: orderNo=%s err=%v", orderNo, err)
+	}
+
+	if err := s.publishStockLockMessage(ctx, message); err != nil {
+		_ = s.orderRepository.DelayStockLockMessageRetryByOrderNo(context.Background(), orderNo, nextOrderMessageRetryTime(), err.Error(), false)
+		log.Printf("publish shop stock lock message will retry: orderNo=%s err=%v", orderNo, err)
 	}
 
 	return s.GetOrderDetail(ctx, input.UserID, orderNo)
@@ -193,15 +208,27 @@ func (s *ShopOrderService) HandleShopStockLockMessage(ctx context.Context, messa
 
 	err := s.orderRepository.LockOrderStock(ctx, message.OrderNo, message.SkuID, message.BuyCount)
 	if err == nil {
+		if markErr := s.orderRepository.MarkStockLockMessageConsumedSuccess(ctx, message.OrderNo); markErr != nil {
+			return markErr
+		}
+		if markErr := s.stockStore.MarkReservationLocked(ctx, message.OrderNo); markErr != nil {
+			log.Printf("mark stock reservation locked failed: orderNo=%s err=%v", message.OrderNo, markErr)
+		}
 		return nil
 	}
 	if errors.Is(err, repository.ErrOrderStockInsufficient) {
+		_ = s.orderRepository.MarkStockLockMessageConsumedFailed(ctx, message.OrderNo, err.Error())
 		if refreshErr := s.refreshSKUStockFromDB(ctx, message.ProductID, message.SkuID); refreshErr != nil {
 			log.Printf("refresh sku redis stock after mysql insufficient failed: skuID=%d err=%v", message.SkuID, refreshErr)
+		}
+		if markErr := s.stockStore.MarkReservationReleased(ctx, message.OrderNo); markErr != nil {
+			log.Printf("mark stock reservation released failed: orderNo=%s err=%v", message.OrderNo, markErr)
 		}
 		return nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
+		_ = s.orderRepository.MarkStockLockMessageConsumedFailed(ctx, message.OrderNo, err.Error())
+		_ = s.stockStore.ReleaseReservation(ctx, message.OrderNo)
 		log.Printf("discard shop stock lock message because order or sku not found: orderNo=%s skuID=%d", message.OrderNo, message.SkuID)
 		return nil
 	}
@@ -209,7 +236,14 @@ func (s *ShopOrderService) HandleShopStockLockMessage(ctx context.Context, messa
 }
 
 func (s *ShopOrderService) preDeductStock(ctx context.Context, input CreateShopOrderInput, skuInfo *repository.PurchaseSKUInfo, orderNo string) (cache.StockPreDeductResult, string, error) {
-	result, existingOrderNo, err := s.stockStore.PreDeductStock(ctx, input.UserID, input.RequestID, input.SkuID, orderNo, input.BuyCount)
+	reservation := cache.StockReservation{
+		OrderNo:   orderNo,
+		UserID:    input.UserID,
+		ProductID: input.ProductID,
+		SkuID:     input.SkuID,
+		BuyCount:  input.BuyCount,
+	}
+	result, existingOrderNo, err := s.stockStore.PreDeductStock(ctx, input.UserID, input.RequestID, reservation)
 	if err != nil || result != cache.StockPreDeductMissing {
 		return result, existingOrderNo, err
 	}
@@ -217,7 +251,154 @@ func (s *ShopOrderService) preDeductStock(ctx context.Context, input CreateShopO
 	if err := s.stockStore.ResetSKUStock(ctx, input.SkuID, skuInfo.AvailableStock); err != nil {
 		return cache.StockPreDeductInsufficient, "", err
 	}
-	return s.stockStore.PreDeductStock(ctx, input.UserID, input.RequestID, input.SkuID, orderNo, input.BuyCount)
+	return s.stockStore.PreDeductStock(ctx, input.UserID, input.RequestID, reservation)
+}
+
+func (s *ShopOrderService) RetryStockLockMessages(ctx context.Context, limit int) {
+	if s == nil || s.stockPublisher == nil {
+		return
+	}
+	messages, err := s.orderRepository.ListStockLockMessagesForRetry(ctx, limit)
+	if err != nil {
+		log.Printf("list stock lock messages for retry failed: %v", err)
+		return
+	}
+	for _, message := range messages {
+		s.retryStockLockMessage(ctx, message)
+	}
+}
+
+func (s *ShopOrderService) RecoverExpiredReservations(ctx context.Context, limit int64) {
+	orderNos, err := s.stockStore.ListExpiredReservations(ctx, time.Now().Unix(), limit)
+	if err != nil {
+		log.Printf("list expired stock reservations failed: %v", err)
+		return
+	}
+	for _, orderNo := range orderNos {
+		s.recoverExpiredReservation(ctx, orderNo)
+	}
+}
+
+func (s *ShopOrderService) StartRecoveryTasks(ctx context.Context) {
+	go s.runMessageRetryTask(ctx)
+	go s.runReservationRecoveryTask(ctx)
+}
+
+func (s *ShopOrderService) retryStockLockMessage(ctx context.Context, message domain.ShopOrderMessage) {
+	if message.RetryCount >= maxOrderMessageRetryCount {
+		_ = s.orderRepository.DelayStockLockMessageRetryByID(ctx, message.MessageID, time.Now(), "message retry count exceeded", true)
+		return
+	}
+
+	var payload mq.ShopStockLockMessage
+	if err := json.Unmarshal([]byte(message.Payload), &payload); err != nil {
+		_ = s.orderRepository.DelayStockLockMessageRetryByID(ctx, message.MessageID, time.Now(), err.Error(), true)
+		return
+	}
+	if payload.MessageID == "" {
+		payload.MessageID = payload.OrderNo
+	}
+	if err := s.publishStockLockMessage(ctx, payload); err != nil {
+		dead := message.RetryCount+1 >= maxOrderMessageRetryCount
+		_ = s.orderRepository.DelayStockLockMessageRetryByID(ctx, message.MessageID, nextOrderMessageRetryTime(), err.Error(), dead)
+	}
+}
+
+func (s *ShopOrderService) recoverExpiredReservation(ctx context.Context, orderNo string) {
+	reservation, ok, err := s.stockStore.GetReservation(ctx, orderNo)
+	if err != nil {
+		log.Printf("get stock reservation failed: orderNo=%s err=%v", orderNo, err)
+		return
+	}
+	if !ok {
+		_ = s.stockStore.MarkReservationReleased(ctx, orderNo)
+		return
+	}
+	if reservation.Status == cache.StockReservationStatusReleased {
+		_ = s.stockStore.MarkReservationReleased(ctx, orderNo)
+		return
+	}
+	if reservation.Status == cache.StockReservationStatusLocked {
+		_ = s.stockStore.MarkReservationLocked(ctx, orderNo)
+		return
+	}
+
+	order, err := s.orderRepository.FindOrderByNo(ctx, orderNo)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		_ = s.stockStore.ReleaseReservation(ctx, orderNo)
+		return
+	}
+	if err != nil {
+		log.Printf("find order for reservation recovery failed: orderNo=%s err=%v", orderNo, err)
+		return
+	}
+
+	switch order.OrderStatus {
+	case domain.OrderStatusWaitPay:
+		_ = s.stockStore.MarkReservationLocked(ctx, orderNo)
+	case domain.OrderStatusStockFailed:
+		_ = s.stockStore.ReleaseReservation(ctx, orderNo)
+	case domain.OrderStatusStockLocking:
+		s.recoverStockLockingOrder(ctx, orderNo)
+	}
+}
+
+func (s *ShopOrderService) recoverStockLockingOrder(ctx context.Context, orderNo string) {
+	message, err := s.orderRepository.FindStockLockMessageByOrderNo(ctx, orderNo)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		_ = s.orderRepository.MarkOrderStockFailed(ctx, orderNo)
+		_ = s.stockStore.ReleaseReservation(ctx, orderNo)
+		return
+	}
+	if err != nil {
+		log.Printf("find stock lock message for reservation recovery failed: orderNo=%s err=%v", orderNo, err)
+		return
+	}
+	switch message.MessageStatus {
+	case domain.OrderMessageStatusWaitPublish, domain.OrderMessageStatusPublished:
+		return
+	case domain.OrderMessageStatusConsumedSuccess:
+		_ = s.stockStore.MarkReservationLocked(ctx, orderNo)
+	case domain.OrderMessageStatusConsumedFailed, domain.OrderMessageStatusDead:
+		_ = s.orderRepository.MarkOrderStockFailed(ctx, orderNo)
+		_ = s.stockStore.ReleaseReservation(ctx, orderNo)
+	}
+}
+
+func (s *ShopOrderService) publishStockLockMessage(ctx context.Context, message mq.ShopStockLockMessage) error {
+	if s.stockPublisher == nil {
+		return errors.New("shop stock lock publisher is nil")
+	}
+	if err := s.stockPublisher.PublishShopStockLockMessage(ctx, message); err != nil {
+		return err
+	}
+	return s.orderRepository.MarkStockLockMessagePublished(ctx, message.OrderNo, nextOrderMessageRetryTime())
+}
+
+func (s *ShopOrderService) runMessageRetryTask(ctx context.Context) {
+	ticker := time.NewTicker(orderMessageRetryInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.RetryStockLockMessages(ctx, orderRecoveryBatchSize)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *ShopOrderService) runReservationRecoveryTask(ctx context.Context) {
+	ticker := time.NewTicker(orderReservationInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.RecoverExpiredReservations(ctx, orderRecoveryBatchSize)
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func (s *ShopOrderService) getRepeatedOrder(ctx context.Context, userID string, orderNo string) (*domain.WebShopOrderItem, error) {
@@ -333,6 +514,10 @@ func roundMoney(value float64) float64 {
 
 func formatOrderMoney(value float64) string {
 	return "¥" + strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", value), "0"), ".")
+}
+
+func nextOrderMessageRetryTime() time.Time {
+	return time.Now().Add(orderMessageRetryDelay)
 }
 
 func generateShopOrderNo() (string, error) {
