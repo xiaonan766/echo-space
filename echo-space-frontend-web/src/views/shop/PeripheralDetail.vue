@@ -98,6 +98,7 @@
             type="primary"
             size="large"
             :disabled="!canBuy || submitting"
+            :loading="submitting"
             @click="handleBuy"
           >
             {{ buyButtonText }}
@@ -298,23 +299,26 @@ const handleBuy = async () => {
   }
 
   submitting.value = true
-  const result = await proxy.Request({
-    url: proxy.Api.createShopOrder,
-    params: {
-      productId: route.params.productId,
-      skuId: currentSku.value.skuId,
-      buyCount: quantity.value,
-      requestId: createOrderRequestId(),
-    },
-    showLoading: true,
-  })
-  submitting.value = false
+  try {
+    const result = await proxy.Request({
+      url: proxy.Api.createShopOrder,
+      params: {
+        productId: route.params.productId,
+        skuId: currentSku.value.skuId,
+        buyCount: quantity.value,
+        requestId: createOrderRequestId(),
+      },
+      showLoading: true,
+    })
 
-  if (!result) {
-    return
+    if (!result) {
+      return
+    }
+    proxy.Message.success('抢购请求已提交')
+    router.push(`/shop/order/${result.data.orderNo}`)
+  } finally {
+    submitting.value = false
   }
-  proxy.Message.success('抢购请求已提交')
-  router.push(`/shop/order/${result.data.orderNo}`)
 }
 
 const getDefaultSku = (list) => {
