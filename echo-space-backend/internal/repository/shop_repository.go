@@ -54,6 +54,23 @@ type SavePeripheralSKUData struct {
 	Status     int
 }
 
+type PurchaseSKUInfo struct {
+	ProductID      uint64     `gorm:"column:product_id"`
+	ProductName    string     `gorm:"column:product_name"`
+	CoverURL       string     `gorm:"column:cover_url"`
+	ProductStatus  int        `gorm:"column:product_status"`
+	SaleStartTime  *time.Time `gorm:"column:sale_start_time"`
+	SkuID          uint64     `gorm:"column:sku_id"`
+	SkuName        string     `gorm:"column:sku_name"`
+	Price          float64    `gorm:"column:price"`
+	TotalStock     int        `gorm:"column:total_stock"`
+	LockedStock    int        `gorm:"column:locked_stock"`
+	SoldStock      int        `gorm:"column:sold_stock"`
+	LimitPerUser   int        `gorm:"column:limit_per_user"`
+	SkuStatus      int        `gorm:"column:sku_status"`
+	AvailableStock int        `gorm:"column:available_stock"`
+}
+
 func NewShopRepository(db *gorm.DB) *ShopRepository {
 	return &ShopRepository{
 		db: db,
@@ -191,6 +208,34 @@ func (r *ShopRepository) ListWebPeripheralSKU(ctx context.Context, productID uin
 		Order("sku_id asc").
 		Scan(&list).Error
 	return list, err
+}
+
+func (r *ShopRepository) FindPurchaseSKU(ctx context.Context, productID uint64, skuID uint64) (*PurchaseSKUInfo, error) {
+	var info PurchaseSKUInfo
+	err := r.db.WithContext(ctx).Table("shop_product sp").
+		Select(`
+			sp.product_id,
+			COALESCE(sp.product_name, '') AS product_name,
+			COALESCE(sp.cover_url, '') AS cover_url,
+			sp.status AS product_status,
+			sp.sale_start_time,
+			ss.sku_id,
+			COALESCE(ss.sku_name, '') AS sku_name,
+			COALESCE(ss.price, 0) AS price,
+			COALESCE(ss.total_stock, 0) AS total_stock,
+			COALESCE(ss.locked_stock, 0) AS locked_stock,
+			COALESCE(ss.sold_stock, 0) AS sold_stock,
+			COALESCE(ss.limit_per_user, 0) AS limit_per_user,
+			ss.status AS sku_status,
+			GREATEST(COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0), 0) AS available_stock
+		`).
+		Joins("JOIN shop_sku ss ON ss.product_id = sp.product_id").
+		Where("sp.product_id = ? AND ss.sku_id = ? AND sp.product_type = ?", productID, skuID, domain.ProductTypePeripheral).
+		Take(&info).Error
+	if err != nil {
+		return nil, err
+	}
+	return &info, nil
 }
 
 func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheralData) error {

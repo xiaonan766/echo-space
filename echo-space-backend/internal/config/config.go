@@ -60,6 +60,7 @@ func (c MySQLConfig) ConnMaxLifetimeDuration() time.Duration {
 type RabbitMQConfig struct {
 	URL                string `yaml:"url"`
 	CacheRecoveryQueue string `yaml:"cacheRecoveryQueue"`
+	StockLockQueue     string `yaml:"stockLockQueue"`
 	PrefetchCount      int    `yaml:"prefetchCount"`
 }
 
@@ -114,6 +115,7 @@ func defaultConfig() Config {
 		RabbitMQ: RabbitMQConfig{
 			URL:                "amqp://guest:guest@localhost:5672/",
 			CacheRecoveryQueue: "echo-space.shop.cache.recovery",
+			StockLockQueue:     "echo-space.shop.stock.lock",
 			PrefetchCount:      20,
 		},
 		Admin: AdminConfig{
@@ -180,6 +182,7 @@ func applyEnvOverrides(cfg *Config) {
 
 	cfg.RabbitMQ.URL = envString("RABBITMQ_URL", cfg.RabbitMQ.URL)
 	cfg.RabbitMQ.CacheRecoveryQueue = envString("RABBITMQ_CACHE_RECOVERY_QUEUE", cfg.RabbitMQ.CacheRecoveryQueue)
+	cfg.RabbitMQ.StockLockQueue = envString("RABBITMQ_STOCK_LOCK_QUEUE", cfg.RabbitMQ.StockLockQueue)
 	cfg.RabbitMQ.PrefetchCount = envInt("RABBITMQ_PREFETCH_COUNT", cfg.RabbitMQ.PrefetchCount)
 
 	cfg.Admin.Account = envString("ADMIN_ACCOUNT", cfg.Admin.Account)

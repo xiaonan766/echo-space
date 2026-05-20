@@ -289,7 +289,7 @@ const handleOrderCenter = () => {
     loginStore.setLogin(true)
     return
   }
-  proxy.Message.warning('订单中心待接入')
+  router.push('/shop/orders')
 }
 
 const getItemKey = (item) => {

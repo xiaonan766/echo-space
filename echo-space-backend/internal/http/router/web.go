@@ -23,6 +23,10 @@ func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
 	shopService := webservice.NewShopService(shopRepository, shopRecommendStore)
 	shopHandler := webhandler.NewShopHandler(shopService)
+	shopOrderRepository := repository.NewShopOrderRepository(deps.DB)
+	shopStockStore := cache.NewShopStockStore(deps.Redis)
+	shopOrderService := webservice.NewShopOrderService(shopRepository, shopOrderRepository, shopStockStore, deps.StockLockPublisher)
+	shopOrderHandler := webhandler.NewShopOrderHandler(shopOrderService)
 
 	accountGroup := group.Group("/account")
 	accountGroup.GET("/checkCode", accountHandler.CheckCode)
@@ -42,4 +46,11 @@ func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	shopGroup.POST("/loadList", shopHandler.LoadList)
 	shopGroup.GET("/getPeripheralDetail", shopHandler.GetPeripheralDetail)
 	shopGroup.POST("/getPeripheralDetail", shopHandler.GetPeripheralDetail)
+
+	shopOrderGroup := shopGroup.Group("/order", middleware.WebAuth(accountService))
+	shopOrderGroup.POST("/create", shopOrderHandler.CreateOrder)
+	shopOrderGroup.GET("/detail", shopOrderHandler.GetOrderDetail)
+	shopOrderGroup.POST("/detail", shopOrderHandler.GetOrderDetail)
+	shopOrderGroup.GET("/loadOrder", shopOrderHandler.LoadOrder)
+	shopOrderGroup.POST("/loadOrder", shopOrderHandler.LoadOrder)
 }

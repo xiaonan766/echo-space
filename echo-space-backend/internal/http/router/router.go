@@ -10,13 +10,15 @@ import (
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/middleware"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/response"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/mq"
 )
 
 type Dependencies struct {
-	Config config.Config
-	Redis  *redis.Client
-	Cache  *cache.HybridCache
-	DB     *gorm.DB
+	Config             config.Config
+	Redis              *redis.Client
+	Cache              *cache.HybridCache
+	DB                 *gorm.DB
+	StockLockPublisher *mq.ShopStockLockPublisher
 }
 
 func New(deps Dependencies) *gin.Engine {

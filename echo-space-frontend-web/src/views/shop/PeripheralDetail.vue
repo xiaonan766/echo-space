@@ -97,7 +97,7 @@
             class="buy-button"
             type="primary"
             size="large"
-            :disabled="!canBuy"
+            :disabled="!canBuy || submitting"
             @click="handleBuy"
           >
             {{ buyButtonText }}
@@ -129,6 +129,7 @@ const loginStore = useLoginStore()
 const navActionStore = useNavAction()
 
 const loading = ref(false)
+const submitting = ref(false)
 const product = ref(null)
 const selectedSku = ref(null)
 const quantity = ref(1)
@@ -165,8 +166,11 @@ const canBuy = computed(() => {
 })
 
 const buyButtonText = computed(() => {
+  if (submitting.value) {
+    return '提交中...'
+  }
   if (!product.value) {
-    return '立即购买'
+    return '立即抢购'
   }
   if (product.value.saleStatus === 0) {
     return '暂未开售'
@@ -174,7 +178,7 @@ const buyButtonText = computed(() => {
   if (product.value.saleStatus === 2 || !currentSku.value || currentSku.value.availableStock <= 0) {
     return '已售罄'
   }
-  return '立即购买'
+  return '立即抢购'
 })
 
 const emptyText = computed(() => {
@@ -269,7 +273,7 @@ const handleOrderCenter = () => {
     loginStore.setLogin(true)
     return
   }
-  proxy.Message.warning('订单中心待接入')
+  router.push('/shop/orders')
 }
 
 const handleSelectSku = (sku) => {
@@ -280,12 +284,45 @@ const handleSelectSku = (sku) => {
   quantity.value = 1
 }
 
-const handleBuy = () => {
-  proxy.Message.warning('订单功能待接入')
+const handleBuy = async () => {
+  if (Object.keys(loginStore.userInfo).length === 0) {
+    loginStore.setLogin(true)
+    return
+  }
+  if (!canBuy.value || !currentSku.value) {
+    proxy.Message.warning('当前规格暂不可抢购')
+    return
+  }
+  if (submitting.value) {
+    return
+  }
+
+  submitting.value = true
+  const result = await proxy.Request({
+    url: proxy.Api.createShopOrder,
+    params: {
+      productId: route.params.productId,
+      skuId: currentSku.value.skuId,
+      buyCount: quantity.value,
+      requestId: createOrderRequestId(),
+    },
+    showLoading: true,
+  })
+  submitting.value = false
+
+  if (!result) {
+    return
+  }
+  proxy.Message.success('抢购请求已提交')
+  router.push(`/shop/order/${result.data.orderNo}`)
 }
 
 const getDefaultSku = (list) => {
   return list.find((item) => item.saleStatus === 1 && item.availableStock > 0) || list[0] || null
+}
+
+const createOrderRequestId = () => {
+  return `${Date.now()}_${Math.random().toString(16).slice(2)}`
 }
 
 watch(

@@ -26,6 +26,7 @@ type App struct {
 	db                        *gorm.DB
 	rabbit                    *mq.RabbitClient
 	shopCacheRecoveryConsumer *mq.ShopCacheRecoveryConsumer
+	shopStockLockConsumer     *mq.ShopStockLockConsumer
 	router                    http.Handler
 }
 
@@ -52,13 +53,16 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		}
 	}
 
-	rabbitClient, shopCacheRecoveryConsumer := setupShopCacheRecovery(ctx, cfg, hybridCache, redisClient, mysqlDB)
+	rabbitClient := setupRabbit(ctx, cfg)
+	shopCacheRecoveryConsumer := setupShopCacheRecovery(ctx, cfg, hybridCache, redisClient, mysqlDB, rabbitClient)
+	stockLockPublisher, shopStockLockConsumer := setupShopStockLock(ctx, cfg, redisClient, mysqlDB, rabbitClient)
 
 	router := approuter.New(approuter.Dependencies{
-		Config: cfg,
-		Redis:  redisClient,
-		Cache:  hybridCache,
-		DB:     mysqlDB,
+		Config:             cfg,
+		Redis:              redisClient,
+		Cache:              hybridCache,
+		DB:                 mysqlDB,
+		StockLockPublisher: stockLockPublisher,
 	})
 
 	return &App{
@@ -68,6 +72,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		db:                        mysqlDB,
 		rabbit:                    rabbitClient,
 		shopCacheRecoveryConsumer: shopCacheRecoveryConsumer,
+		shopStockLockConsumer:     shopStockLockConsumer,
 		router:                    router,
 	}, nil
 }
@@ -77,6 +82,9 @@ func (a *App) Router() http.Handler {
 }
 
 func (a *App) Close() {
+	if a.shopStockLockConsumer != nil {
+		a.shopStockLockConsumer.Close()
+	}
 	if a.shopCacheRecoveryConsumer != nil {
 		a.shopCacheRecoveryConsumer.Close()
 	}
@@ -104,11 +112,19 @@ func closeDB(db *gorm.DB) {
 	_ = sqlDB.Close()
 }
 
-func setupShopCacheRecovery(ctx context.Context, cfg config.Config, hybridCache *cache.HybridCache, redisClient *redis.Client, mysqlDB *gorm.DB) (*mq.RabbitClient, *mq.ShopCacheRecoveryConsumer) {
+func setupRabbit(ctx context.Context, cfg config.Config) *mq.RabbitClient {
 	rabbitClient, err := mq.NewRabbitClient(ctx, cfg.RabbitMQ)
 	if err != nil {
-		log.Printf("rabbitmq unavailable, cache recovery will use direct redis write: %v", err)
-		return nil, nil
+		log.Printf("rabbitmq unavailable, async shop tasks will be disabled: %v", err)
+		return nil
+	}
+	return rabbitClient
+}
+
+func setupShopCacheRecovery(ctx context.Context, cfg config.Config, hybridCache *cache.HybridCache, redisClient *redis.Client, mysqlDB *gorm.DB, rabbitClient *mq.RabbitClient) *mq.ShopCacheRecoveryConsumer {
+	if rabbitClient == nil {
+		log.Printf("cache recovery will use direct redis write because rabbitmq is unavailable")
+		return nil
 	}
 
 	shopRepository := repository.NewShopRepository(mysqlDB)
@@ -117,12 +133,33 @@ func setupShopCacheRecovery(ctx context.Context, cfg config.Config, hybridCache 
 	consumer := mq.NewShopCacheRecoveryConsumer(rabbitClient, cfg.RabbitMQ.CacheRecoveryQueue, cfg.RabbitMQ.PrefetchCount, recoveryHandler)
 	if err := consumer.Start(ctx); err != nil {
 		log.Printf("start shop cache recovery consumer failed: %v", err)
-		return rabbitClient, nil
+		return nil
 	}
 
 	publisher := mq.NewShopCacheRecoveryPublisher(rabbitClient, cfg.RabbitMQ.CacheRecoveryQueue)
 	hybridCache.SetRecoveryHandler(cache.NewShopCacheRecoveryHandler(publisher))
 
 	log.Printf("shop cache recovery consumer started, queue=%s", cfg.RabbitMQ.CacheRecoveryQueue)
-	return rabbitClient, consumer
+	return consumer
+}
+
+func setupShopStockLock(ctx context.Context, cfg config.Config, redisClient *redis.Client, mysqlDB *gorm.DB, rabbitClient *mq.RabbitClient) (*mq.ShopStockLockPublisher, *mq.ShopStockLockConsumer) {
+	if rabbitClient == nil {
+		log.Printf("shop stock lock is disabled because rabbitmq is unavailable")
+		return nil, nil
+	}
+
+	shopRepository := repository.NewShopRepository(mysqlDB)
+	orderRepository := repository.NewShopOrderRepository(mysqlDB)
+	stockStore := cache.NewShopStockStore(redisClient)
+	orderService := webservice.NewShopOrderService(shopRepository, orderRepository, stockStore, nil)
+	consumer := mq.NewShopStockLockConsumer(rabbitClient, cfg.RabbitMQ.StockLockQueue, cfg.RabbitMQ.PrefetchCount, orderService)
+	if err := consumer.Start(ctx); err != nil {
+		log.Printf("start shop stock lock consumer failed: %v", err)
+		return nil, nil
+	}
+
+	publisher := mq.NewShopStockLockPublisher(rabbitClient, cfg.RabbitMQ.StockLockQueue)
+	log.Printf("shop stock lock consumer started, queue=%s", cfg.RabbitMQ.StockLockQueue)
+	return publisher, consumer
 }

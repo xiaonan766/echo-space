@@ -78,6 +78,9 @@ const Api = {
     loadShopRecommend: server_shop + "/loadRecommend",
     loadShopList: server_shop + "/loadList",
     getPeripheralDetail: server_shop + "/getPeripheralDetail",
+    createShopOrder: server_shop + "/order/create",
+    getShopOrderDetail: server_shop + "/order/detail",
+    loadShopOrder: server_shop + "/order/loadOrder",
 
     //播放历史
     playHisotry: server_web + "/history/loadHistory",
