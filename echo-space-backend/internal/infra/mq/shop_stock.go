@@ -46,29 +46,10 @@ func (p *ShopStockLockPublisher) PublishShopStockLockMessage(ctx context.Context
 		return fmt.Errorf("marshal shop stock lock message: %w", err)
 	}
 
-	publishCtx, cancel := context.WithTimeout(ctx, publishTimeout)
-	defer cancel()
-
-	channel, err := p.client.Channel()
-	if err != nil {
-		return err
-	}
-	defer channel.Close()
-
-	if err := declareDurableQueue(channel, p.queueName); err != nil {
-		return err
-	}
-	if err := channel.Confirm(false); err != nil {
-		return fmt.Errorf("enable rabbitmq confirm: %w", err)
-	}
-	confirmCh := channel.NotifyPublish(make(chan amqp.Confirmation, 1))
-
-	if err := channel.PublishWithContext(
-		publishCtx,
-		"",
+	return publishPersistentWithConfirm(
+		ctx,
+		p.client,
 		p.queueName,
-		false,
-		false,
 		amqp.Publishing{
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent,
@@ -76,19 +57,7 @@ func (p *ShopStockLockPublisher) PublishShopStockLockMessage(ctx context.Context
 			Timestamp:    time.Now(),
 			Body:         body,
 		},
-	); err != nil {
-		return fmt.Errorf("publish shop stock lock message: %w", err)
-	}
-
-	select {
-	case confirm := <-confirmCh:
-		if !confirm.Ack {
-			return errors.New("rabbitmq did not ack shop stock lock message")
-		}
-		return nil
-	case <-publishCtx.Done():
-		return publishCtx.Err()
-	}
+	)
 }
 
 type ShopStockLockHandler interface {
@@ -103,6 +72,7 @@ type ShopStockLockConsumer struct {
 
 	channel *amqp.Channel
 	stopCh  chan struct{}
+	mu      sync.Mutex
 	once    sync.Once
 }
 
@@ -119,23 +89,42 @@ func NewShopStockLockConsumer(client *RabbitClient, queueName string, prefetchCo
 	}
 }
 
-func (c *ShopStockLockConsumer) Start(_ context.Context) error {
+func (c *ShopStockLockConsumer) Start(ctx context.Context) error {
 	if c == nil || c.client == nil || c.handler == nil {
 		return errors.New("shop stock lock consumer is not ready")
 	}
+	go c.run(ctx)
+	return nil
+}
 
+func (c *ShopStockLockConsumer) run(ctx context.Context) {
+	for {
+		if err := c.consumeOnce(ctx); err != nil {
+			if isConsumerStopped(ctx, c.stopCh) {
+				return
+			}
+			log.Printf("shop stock lock consumer stopped, will restart: queue=%s err=%v", c.queueName, err)
+		}
+		if !waitConsumerRetry(ctx, c.stopCh) {
+			return
+		}
+	}
+}
+
+func (c *ShopStockLockConsumer) consumeOnce(ctx context.Context) error {
 	channel, err := c.client.Channel()
 	if err != nil {
 		return err
 	}
+	defer channel.Close()
+
 	if err := declareDurableQueue(channel, c.queueName); err != nil {
-		_ = channel.Close()
 		return err
 	}
 	if err := channel.Qos(c.prefetchCount, 0, false); err != nil {
-		_ = channel.Close()
 		return fmt.Errorf("set rabbitmq qos: %w", err)
 	}
+	closeCh := channel.NotifyClose(make(chan *amqp.Error, 1))
 
 	deliveries, err := channel.Consume(
 		c.queueName,
@@ -147,13 +136,30 @@ func (c *ShopStockLockConsumer) Start(_ context.Context) error {
 		nil,
 	)
 	if err != nil {
-		_ = channel.Close()
 		return fmt.Errorf("consume shop stock lock queue: %w", err)
 	}
 
-	c.channel = channel
-	go c.consume(deliveries)
-	return nil
+	c.setChannel(channel)
+	defer c.clearChannel(channel)
+
+	for {
+		select {
+		case delivery, ok := <-deliveries:
+			if !ok {
+				return errors.New("shop stock lock delivery channel closed")
+			}
+			c.handleDelivery(delivery)
+		case closeErr := <-closeCh:
+			if closeErr != nil {
+				return fmt.Errorf("shop stock lock channel closed: %w", closeErr)
+			}
+			return errors.New("shop stock lock channel closed")
+		case <-c.stopCh:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 func (c *ShopStockLockConsumer) Close() {
@@ -162,24 +168,13 @@ func (c *ShopStockLockConsumer) Close() {
 	}
 	c.once.Do(func() {
 		close(c.stopCh)
+		c.mu.Lock()
+		defer c.mu.Unlock()
 		if c.channel != nil {
 			_ = c.channel.Close()
+			c.channel = nil
 		}
 	})
-}
-
-func (c *ShopStockLockConsumer) consume(deliveries <-chan amqp.Delivery) {
-	for {
-		select {
-		case delivery, ok := <-deliveries:
-			if !ok {
-				return
-			}
-			c.handleDelivery(delivery)
-		case <-c.stopCh:
-			return
-		}
-	}
 }
 
 func (c *ShopStockLockConsumer) handleDelivery(delivery amqp.Delivery) {
@@ -199,6 +194,20 @@ func (c *ShopStockLockConsumer) handleDelivery(delivery amqp.Delivery) {
 		return
 	}
 	_ = delivery.Ack(false)
+}
+
+func (c *ShopStockLockConsumer) setChannel(channel *amqp.Channel) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.channel = channel
+}
+
+func (c *ShopStockLockConsumer) clearChannel(channel *amqp.Channel) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.channel == channel {
+		c.channel = nil
+	}
 }
 
 func normalizeStockLockQueueName(queueName string) string {
