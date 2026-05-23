@@ -175,6 +175,10 @@ func (s *ShopStockStore) ResetSKUStock(ctx context.Context, skuID uint64, availa
 	return s.redis.Set(ctx, skuStockKey(skuID), availableStock, shopSKUStockTTL).Err()
 }
 
+func (s *ShopStockStore) PrewarmSKUStock(ctx context.Context, skuID uint64, availableStock int) error {
+	return s.ResetSKUStock(ctx, skuID, availableStock)
+}
+
 func (s *ShopStockStore) PreDeductStock(ctx context.Context, userID string, requestID string, reservation StockReservation) (StockPreDeductResult, string, error) {
 	if s == nil || s.redis == nil {
 		return StockPreDeductInsufficient, "", errors.New("redis is not ready")

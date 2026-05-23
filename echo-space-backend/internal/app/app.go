@@ -59,6 +59,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	stockLockPublisher, shopStockLockConsumer := setupShopStockLock(ctx, cfg, redisClient, mysqlDB, rabbitClient)
 	backgroundCtx, backgroundCancel := context.WithCancel(context.Background())
 	setupShopOrderRecovery(backgroundCtx, redisClient, mysqlDB, stockLockPublisher)
+	setupShopStockPrewarm(backgroundCtx, redisClient, mysqlDB)
 
 	router := approuter.New(approuter.Dependencies{
 		Config:             cfg,
@@ -178,4 +179,12 @@ func setupShopOrderRecovery(ctx context.Context, redisClient *redis.Client, mysq
 	orderService := webservice.NewShopOrderService(shopRepository, orderRepository, stockStore, stockLockPublisher)
 	orderService.StartRecoveryTasks(ctx)
 	log.Printf("shop order recovery tasks started")
+}
+
+func setupShopStockPrewarm(ctx context.Context, redisClient *redis.Client, mysqlDB *gorm.DB) {
+	shopRepository := repository.NewShopRepository(mysqlDB)
+	stockStore := cache.NewShopStockStore(redisClient)
+	prewarmService := webservice.NewShopStockPrewarmService(shopRepository, stockStore)
+	prewarmService.Start(ctx)
+	log.Printf("shop stock prewarm task started")
 }

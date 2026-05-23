@@ -54,6 +54,23 @@ type SavePeripheralSKUData struct {
 	Status     int
 }
 
+type SavePeripheralResult struct {
+	ProductID     uint64
+	ShouldPrewarm bool
+}
+
+type ChangePeripheralStatusResult struct {
+	RowsAffected  int64
+	ShouldPrewarm bool
+}
+
+type SKUStockPrewarmItem struct {
+	ProductID      uint64     `gorm:"column:product_id"`
+	SkuID          uint64     `gorm:"column:sku_id"`
+	AvailableStock int        `gorm:"column:available_stock"`
+	SaleStartTime  *time.Time `gorm:"column:sale_start_time"`
+}
+
 type PurchaseSKUInfo struct {
 	ProductID      uint64     `gorm:"column:product_id"`
 	ProductName    string     `gorm:"column:product_name"`
@@ -238,8 +255,9 @@ func (r *ShopRepository) FindPurchaseSKU(ctx context.Context, productID uint64, 
 	return &info, nil
 }
 
-func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheralData) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheralData) (SavePeripheralResult, error) {
+	var result SavePeripheralResult
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if data.ProductID == 0 {
 			product := &domain.ShopProduct{
 				ProductType:     domain.ProductTypePeripheral,
@@ -254,6 +272,8 @@ func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheral
 			if err := tx.Create(product).Error; err != nil {
 				return err
 			}
+			result.ProductID = product.ProductID
+			result.ShouldPrewarm = data.Status == domain.ProductStatusOnShelf
 			for _, skuData := range data.SkuList {
 				sku := &domain.ShopSKU{
 					ProductID:  product.ProductID,
@@ -275,6 +295,8 @@ func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheral
 			Take(&product).Error; err != nil {
 			return err
 		}
+		result.ProductID = product.ProductID
+		result.ShouldPrewarm = product.Status == domain.ProductStatusOffShelf && data.Status == domain.ProductStatusOnShelf
 
 		var existingSkuList []domain.ShopSKU
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -289,9 +311,11 @@ func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheral
 		}
 
 		priceChanged := false
+		stockChanged := false
 		for _, skuData := range data.SkuList {
 			if skuData.SkuID == 0 {
 				priceChanged = true
+				stockChanged = true
 				continue
 			}
 			sku, ok := existingByID[skuData.SkuID]
@@ -301,11 +325,14 @@ func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheral
 			if skuData.TotalStock < sku.LockedStock+sku.SoldStock {
 				return ErrStockLessThanOccupied
 			}
+			if skuData.TotalStock != sku.TotalStock {
+				stockChanged = true
+			}
 			if isPriceChanged(sku.Price, skuData.Price) {
 				priceChanged = true
 			}
 		}
-		if priceChanged && !canChangePrice(product) {
+		if (priceChanged || stockChanged) && !canChangePriceOrStock(product) {
 			return ErrPriceChangeTooEarly
 		}
 
@@ -356,21 +383,22 @@ func (r *ShopRepository) SavePeripheral(ctx context.Context, data SavePeripheral
 		}
 		return nil
 	})
+	return result, err
 }
 
-func (r *ShopRepository) ChangePeripheralStatus(ctx context.Context, productID uint64, status int) (int64, error) {
-	var rowsAffected int64
+func (r *ShopRepository) ChangePeripheralStatus(ctx context.Context, productID uint64, status int) (ChangePeripheralStatusResult, error) {
+	var changeResult ChangePeripheralStatusResult
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var product domain.ShopProduct
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("product_id = ? AND product_type = ?", productID, domain.ProductTypePeripheral).
 			Take(&product).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				rowsAffected = 0
 				return nil
 			}
 			return err
 		}
+		changeResult.ShouldPrewarm = product.Status == domain.ProductStatusOffShelf && status == domain.ProductStatusOnShelf
 
 		updates := map[string]any{
 			"status": status,
@@ -385,13 +413,43 @@ func (r *ShopRepository) ChangePeripheralStatus(ctx context.Context, productID u
 		if result.Error != nil {
 			return result.Error
 		}
-		rowsAffected = result.RowsAffected
-		if rowsAffected == 0 {
+		changeResult.RowsAffected = result.RowsAffected
+		if changeResult.RowsAffected == 0 {
 			return nil
 		}
 		return nil
 	})
-	return rowsAffected, err
+	return changeResult, err
+}
+
+func (r *ShopRepository) ListPeripheralSKUStockForPrewarm(ctx context.Context, productID uint64) ([]SKUStockPrewarmItem, error) {
+	var list []SKUStockPrewarmItem
+	err := r.db.WithContext(ctx).Table("shop_product sp").
+		Select(skuStockPrewarmSelectSQL()).
+		Joins("JOIN shop_sku ss ON ss.product_id = sp.product_id").
+		Where("sp.product_id = ? AND sp.product_type = ?", productID, domain.ProductTypePeripheral).
+		Where("sp.status = ? AND ss.status = ?", domain.ProductStatusOnShelf, domain.ProductStatusOnShelf).
+		Order("ss.sku_id asc").
+		Scan(&list).Error
+	return list, err
+}
+
+func (r *ShopRepository) ListPeripheralSKUStockStartingSoon(ctx context.Context, from time.Time, to time.Time, limit int) ([]SKUStockPrewarmItem, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	var list []SKUStockPrewarmItem
+	err := r.db.WithContext(ctx).Table("shop_product sp").
+		Select(skuStockPrewarmSelectSQL()).
+		Joins("JOIN shop_sku ss ON ss.product_id = sp.product_id").
+		Where("sp.product_type = ?", domain.ProductTypePeripheral).
+		Where("sp.status = ? AND ss.status = ?", domain.ProductStatusOnShelf, domain.ProductStatusOnShelf).
+		Where("sp.sale_start_time IS NOT NULL AND sp.sale_start_time > ? AND sp.sale_start_time <= ?", from, to).
+		Order("sp.sale_start_time asc").
+		Order("ss.sku_id asc").
+		Limit(limit).
+		Scan(&list).Error
+	return list, err
 }
 
 func (r *ShopRepository) applyPeripheralListFilter(db *gorm.DB, query PeripheralListQuery) *gorm.DB {
@@ -504,6 +562,15 @@ func skuSummaryJoinSQL() string {
 	`
 }
 
+func skuStockPrewarmSelectSQL() string {
+	return `
+		sp.product_id,
+		ss.sku_id,
+		sp.sale_start_time,
+		GREATEST(COALESCE(ss.total_stock, 0) - COALESCE(ss.locked_stock, 0) - COALESCE(ss.sold_stock, 0), 0) AS available_stock
+	`
+}
+
 var ErrStockLessThanOccupied = errors.New("total stock is less than locked and sold stock")
 
 var ErrPriceChangeTooEarly = errors.New("price can only be changed after off shelf for 30 minutes")
@@ -512,7 +579,7 @@ func isPriceChanged(oldPrice float64, newPrice float64) bool {
 	return math.Round(oldPrice*100) != math.Round(newPrice*100)
 }
 
-func canChangePrice(product domain.ShopProduct) bool {
+func canChangePriceOrStock(product domain.ShopProduct) bool {
 	if product.Status == domain.ProductStatusOnShelf {
 		return false
 	}

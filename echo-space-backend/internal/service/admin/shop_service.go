@@ -19,6 +19,7 @@ import (
 type ShopService struct {
 	shopRepository *repository.ShopRepository
 	recommendStore *cache.ShopRecommendStore
+	stockStore     *cache.ShopStockStore
 }
 
 type PeripheralListInput struct {
@@ -49,10 +50,13 @@ type SavePeripheralSKUInput struct {
 	Status     int
 }
 
-func NewShopService(shopRepository *repository.ShopRepository, recommendStore *cache.ShopRecommendStore) *ShopService {
+const peripheralStockPrewarmWindow = 5 * time.Minute
+
+func NewShopService(shopRepository *repository.ShopRepository, recommendStore *cache.ShopRecommendStore, stockStore *cache.ShopStockStore) *ShopService {
 	return &ShopService{
 		shopRepository: shopRepository,
 		recommendStore: recommendStore,
+		stockStore:     stockStore,
 	}
 }
 
@@ -114,7 +118,7 @@ func (s *ShopService) SavePeripheral(ctx context.Context, input SavePeripheralIn
 		return businessError
 	}
 
-	err = s.shopRepository.SavePeripheral(ctx, repository.SavePeripheralData{
+	saveResult, err := s.shopRepository.SavePeripheral(ctx, repository.SavePeripheralData{
 		ProductID:       input.ProductID,
 		ProductName:     input.ProductName,
 		CoverURL:        input.CoverURL,
@@ -129,7 +133,7 @@ func (s *ShopService) SavePeripheral(ctx context.Context, input SavePeripheralIn
 		return &BusinessError{Info: "总库存不能小于已售库存和锁定库存之和"}
 	}
 	if errors.Is(err, repository.ErrPriceChangeTooEarly) {
-		return &BusinessError{Info: "已上架商品需先下架，且下架满30分钟后才能修改价格或新增规格"}
+		return &BusinessError{Info: "已上架商品需要先下架，且下架满30分钟后才能修改价格、库存或新增规格"}
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return &BusinessError{Info: "周边商品不存在"}
@@ -138,8 +142,11 @@ func (s *ShopService) SavePeripheral(ctx context.Context, input SavePeripheralIn
 		return err
 	}
 
-	if input.ProductID > 0 {
-		s.deletePeripheralShopCache(ctx, input.ProductID, input.Status == domain.ProductStatusOffShelf)
+	if saveResult.ProductID > 0 {
+		s.deletePeripheralShopCache(ctx, saveResult.ProductID, input.Status == domain.ProductStatusOffShelf)
+		if saveResult.ShouldPrewarm {
+			s.prewarmPeripheralStockIfReady(ctx, saveResult.ProductID, saleStartTime)
+		}
 	} else {
 		s.deleteHotPeripheralRecommendCache(ctx)
 	}
@@ -151,15 +158,18 @@ func (s *ShopService) ChangePeripheralStatus(ctx context.Context, productID uint
 		return &BusinessError{Info: "参数错误"}
 	}
 
-	rowsAffected, err := s.shopRepository.ChangePeripheralStatus(ctx, productID, status)
+	changeResult, err := s.shopRepository.ChangePeripheralStatus(ctx, productID, status)
 	if err != nil {
 		return err
 	}
-	if rowsAffected == 0 {
+	if changeResult.RowsAffected == 0 {
 		return &BusinessError{Info: "周边商品不存在"}
 	}
 
 	s.deletePeripheralShopCache(ctx, productID, status == domain.ProductStatusOffShelf)
+	if changeResult.ShouldPrewarm {
+		s.prewarmPeripheralStockByProduct(ctx, productID)
+	}
 	return nil
 }
 
@@ -185,6 +195,40 @@ func (s *ShopService) deleteHotPeripheralRecommendCache(ctx context.Context) {
 	if err := s.recommendStore.DeleteHotPeripheral(ctx); err != nil {
 		log.Printf("delete hot peripheral recommend cache: %v", err)
 	}
+}
+
+func (s *ShopService) prewarmPeripheralStockIfReady(ctx context.Context, productID uint64, saleStartTime *time.Time) {
+	if !shouldPrewarmPeripheralStock(saleStartTime, time.Now()) {
+		return
+	}
+	s.prewarmPeripheralStockByProduct(ctx, productID)
+}
+
+func (s *ShopService) prewarmPeripheralStockByProduct(ctx context.Context, productID uint64) {
+	if s.stockStore == nil || productID == 0 {
+		return
+	}
+
+	list, err := s.shopRepository.ListPeripheralSKUStockForPrewarm(ctx, productID)
+	if err != nil {
+		log.Printf("list peripheral sku stock for prewarm failed: productID=%d err=%v", productID, err)
+		return
+	}
+	if len(list) == 0 || !shouldPrewarmPeripheralStock(list[0].SaleStartTime, time.Now()) {
+		return
+	}
+	for _, item := range list {
+		if err := s.stockStore.PrewarmSKUStock(ctx, item.SkuID, item.AvailableStock); err != nil {
+			log.Printf("prewarm peripheral sku stock failed: productID=%d skuID=%d err=%v", item.ProductID, item.SkuID, err)
+		}
+	}
+}
+
+func shouldPrewarmPeripheralStock(saleStartTime *time.Time, now time.Time) bool {
+	if saleStartTime == nil {
+		return true
+	}
+	return !saleStartTime.After(now.Add(peripheralStockPrewarmWindow))
 }
 
 func normalizePeripheralListInput(input PeripheralListInput) PeripheralListInput {
