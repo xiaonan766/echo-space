@@ -114,6 +114,15 @@
         <NoData v-else msg="暂无商品描述"></NoData>
       </section>
     </main>
+
+    <ShopPayDialog
+      v-model="payDialogVisible"
+      :order="payOrder"
+      :paying="paying"
+      :refreshing="payRefreshing"
+      @refresh="handleRefreshPayOrder"
+      @confirm="handlePayConfirm"
+    ></ShopPayDialog>
   </div>
 </template>
 
@@ -122,6 +131,7 @@ import { computed, getCurrentInstance, onMounted, reactive, ref, watch } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { useLoginStore } from '@/stores/loginStore.js'
 import { useNavAction } from '@/stores/navActionStore'
+import ShopPayDialog from './components/ShopPayDialog.vue'
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
@@ -131,9 +141,13 @@ const navActionStore = useNavAction()
 
 const loading = ref(false)
 const submitting = ref(false)
+const paying = ref(false)
+const payRefreshing = ref(false)
 const product = ref(null)
 const selectedSku = ref(null)
 const quantity = ref(1)
+const payDialogVisible = ref(false)
+const payOrder = ref(null)
 const searchForm = reactive({
   keyword: '',
 })
@@ -315,10 +329,74 @@ const handleBuy = async () => {
       return
     }
     proxy.Message.success('抢购请求已提交')
-    router.push(`/shop/order/${result.data.orderNo}`)
+    payOrder.value = result.data || null
+    payDialogVisible.value = true
+    if (payOrder.value?.orderStatus === 0) {
+      window.setTimeout(() => {
+        handleRefreshPayOrder(false)
+      }, 1200)
+    }
   } finally {
     submitting.value = false
   }
+}
+
+const handleRefreshPayOrder = async (showMessage = true) => {
+  if (!payOrder.value?.orderNo || payRefreshing.value) {
+    return
+  }
+
+  payRefreshing.value = true
+  const result = await proxy.Request({
+    url: proxy.Api.getShopOrderDetail,
+    params: {
+      orderNo: payOrder.value.orderNo,
+    },
+    showError: false,
+  })
+  payRefreshing.value = false
+
+  if (result?.data) {
+    payOrder.value = result.data
+    if (showMessage) {
+      proxy.Message.success('订单状态已刷新')
+    }
+  }
+}
+
+const handlePayConfirm = async () => {
+  if (!payOrder.value?.orderNo || paying.value) {
+    return
+  }
+
+  paying.value = true
+  const result = await proxy.Request({
+    url: proxy.Api.payShopOrder,
+    params: {
+      orderNo: payOrder.value.orderNo,
+    },
+    showLoading: true,
+  })
+  paying.value = false
+
+  if (!result) {
+    return
+  }
+  updateUserCoinCount(result.data)
+  payOrder.value = result.data || payOrder.value
+  payDialogVisible.value = false
+  proxy.Message.success('支付成功')
+}
+
+const updateUserCoinCount = (data) => {
+  const nextCoinCount = data?.currentCoinCount ?? data?.userInfo?.currentCoinCount
+  if (nextCoinCount === undefined || nextCoinCount === null) {
+    return
+  }
+  loginStore.saveUserInfo({
+    ...loginStore.userInfo,
+    currentCoinCount: nextCoinCount,
+  })
 }
 
 const getDefaultSku = (list) => {

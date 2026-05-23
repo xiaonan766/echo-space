@@ -41,11 +41,13 @@
       </div>
 
       <section class="result-panel" v-if="activeOrder" v-loading="detailLoading">
-        <div :class="['result-status', orderStatusClass(activeOrder)]">
-          {{ activeOrder.orderStatusName }}
-        </div>
         <div class="result-info">
-          <h1>{{ activeOrder.productName }}</h1>
+          <div class="result-title-row">
+            <h1>{{ activeOrder.productName }}</h1>
+            <span :class="['order-status', orderStatusClass(activeOrder)]">
+              {{ activeOrder.orderStatusName }}
+            </span>
+          </div>
           <div class="order-no">订单号：{{ activeOrder.orderNo }}</div>
           <div class="result-meta">
             <span>{{ activeOrder.skuName }}</span>
@@ -53,12 +55,22 @@
             <span>{{ activeOrder.totalAmountText }}</span>
           </div>
           <p v-if="activeOrder.orderStatus === 0">库存正在异步锁定，稍后刷新可查看最终结果。</p>
-          <p v-else-if="activeOrder.orderStatus === 1">库存已锁定，后续接入支付后可继续完成支付。</p>
+          <p v-else-if="activeOrder.orderStatus === 1">库存已锁定，可以使用硬币余额完成支付。</p>
           <p v-else>本次抢购未成功，Redis 预扣库存会自动回补。</p>
         </div>
-        <el-button class="refresh-button" type="primary" plain @click="loadOrderDetail">
-          刷新结果
-        </el-button>
+        <div class="result-actions">
+          <el-button class="refresh-button" type="primary" plain @click="loadOrderDetail">
+            刷新结果
+          </el-button>
+          <el-button
+            v-if="canPay(activeOrder)"
+            class="pay-action-button"
+            type="primary"
+            @click="handleOpenPayDialog(activeOrder)"
+          >
+            去支付
+          </el-button>
+        </div>
       </section>
 
       <section class="order-list-panel">
@@ -68,12 +80,14 @@
         </div>
 
         <div class="order-list" v-loading="listLoading">
-          <button
+          <div
             v-for="order in orderList"
             :key="order.orderNo"
             class="order-card"
-            type="button"
+            role="button"
+            tabindex="0"
             @click="goOrderDetail(order.orderNo)"
+            @keyup.enter="goOrderDetail(order.orderNo)"
           >
             <div class="order-cover" :style="getCoverStyle(order)">
               <span v-if="!order.coverUrl">暂无图片</span>
@@ -89,10 +103,21 @@
               <div class="order-time">创建时间：{{ order.createTime }}</div>
               <div class="order-bottom">
                 <span class="order-number">订单号：{{ order.orderNo }}</span>
-                <span class="order-price">{{ order.totalAmountText }}</span>
+                <div class="order-pay-area">
+                  <el-button
+                    v-if="canPay(order)"
+                    class="pay-action-button"
+                    type="primary"
+                    plain
+                    @click.stop="handleOpenPayDialog(order)"
+                  >
+                    去支付
+                  </el-button>
+                  <span class="order-price">{{ order.totalAmountText }}</span>
+                </div>
               </div>
             </div>
-          </button>
+          </div>
           <NoData v-if="!listLoading && orderList.length === 0" msg="暂无订单"></NoData>
         </div>
 
@@ -101,6 +126,15 @@
         </div>
       </section>
     </main>
+
+    <ShopPayDialog
+      v-model="payDialogVisible"
+      :order="payOrder"
+      :paying="paying"
+      :refreshing="payRefreshing"
+      @refresh="handleRefreshPayOrder"
+      @confirm="handlePayConfirm"
+    ></ShopPayDialog>
   </div>
 </template>
 
@@ -109,6 +143,7 @@ import { computed, getCurrentInstance, onMounted, reactive, ref, watch } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { useLoginStore } from '@/stores/loginStore.js'
 import { useNavAction } from '@/stores/navActionStore'
+import ShopPayDialog from './components/ShopPayDialog.vue'
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
@@ -118,8 +153,12 @@ const navActionStore = useNavAction()
 
 const detailLoading = ref(false)
 const listLoading = ref(false)
+const paying = ref(false)
+const payRefreshing = ref(false)
 const activeOrder = ref(null)
 const orderList = ref([])
+const payDialogVisible = ref(false)
+const payOrder = ref(null)
 const searchForm = reactive({
   keyword: '',
 })
@@ -199,6 +238,88 @@ const loadMoreOrder = () => {
   loadOrderList(false)
 }
 
+const canPay = (order) => {
+  return order?.orderStatus === 1 && Number(order?.payStatus || 0) === 0
+}
+
+const handleOpenPayDialog = (order) => {
+  if (!order) {
+    return
+  }
+  payOrder.value = { ...order }
+  payDialogVisible.value = true
+}
+
+const handleRefreshPayOrder = async (showMessage = true) => {
+  if (!payOrder.value?.orderNo || payRefreshing.value) {
+    return
+  }
+
+  payRefreshing.value = true
+  const result = await proxy.Request({
+    url: proxy.Api.getShopOrderDetail,
+    params: {
+      orderNo: payOrder.value.orderNo,
+    },
+    showError: false,
+  })
+  payRefreshing.value = false
+
+  if (result?.data) {
+    syncOrderToPage(result.data)
+    if (showMessage) {
+      proxy.Message.success('订单状态已刷新')
+    }
+  }
+}
+
+const handlePayConfirm = async () => {
+  if (!payOrder.value?.orderNo || paying.value) {
+    return
+  }
+
+  paying.value = true
+  const result = await proxy.Request({
+    url: proxy.Api.payShopOrder,
+    params: {
+      orderNo: payOrder.value.orderNo,
+    },
+    showLoading: true,
+  })
+  paying.value = false
+
+  if (!result) {
+    return
+  }
+  updateUserCoinCount(result.data)
+  if (result.data) {
+    syncOrderToPage(result.data)
+  }
+  payDialogVisible.value = false
+  proxy.Message.success('支付成功')
+}
+
+const syncOrderToPage = (order) => {
+  payOrder.value = order
+  if (activeOrder.value?.orderNo === order.orderNo) {
+    activeOrder.value = order
+  }
+  orderList.value = orderList.value.map((item) => {
+    return item.orderNo === order.orderNo ? order : item
+  })
+}
+
+const updateUserCoinCount = (data) => {
+  const nextCoinCount = data?.currentCoinCount ?? data?.userInfo?.currentCoinCount
+  if (nextCoinCount === undefined || nextCoinCount === null) {
+    return
+  }
+  loginStore.saveUserInfo({
+    ...loginStore.userInfo,
+    currentCoinCount: nextCoinCount,
+  })
+}
+
 const goOrderDetail = (orderNo) => {
   if (!orderNo) {
     return
@@ -261,6 +382,9 @@ const orderStatusClass = (order) => {
   }
   if (order.orderStatus === 2) {
     return 'failed'
+  }
+  if (order.orderStatus === 3) {
+    return 'paid'
   }
   return ''
 }
@@ -422,39 +546,24 @@ watch(
 
 .result-panel {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) 120px;
+  grid-template-columns: minmax(0, 1fr) 128px;
   gap: 22px;
-  align-items: center;
+  align-items: flex-start;
   padding: 28px 32px;
   margin-bottom: 24px;
 }
 
-.result-status {
-  height: 88px;
-  border-radius: 6px;
+.result-actions {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
-  text-align: center;
-  background: #909399;
-  &.locking {
-    background: #e6a23c;
-  }
-  &.wait-pay {
-    background: #fb7299;
-  }
-  &.failed {
-    background: #909399;
-  }
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
 }
 
 .result-info {
   min-width: 0;
   h1 {
-    margin: 0 0 10px;
+    margin: 0;
     font-size: 24px;
     line-height: 34px;
     color: #222;
@@ -464,6 +573,14 @@ watch(
     margin: 12px 0 0;
     color: #61666d;
   }
+}
+
+.result-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
 }
 
 .order-no,
@@ -481,9 +598,28 @@ watch(
 }
 
 .refresh-button {
-  justify-self: end;
   border-color: #fb7299;
   color: #fb7299;
+}
+
+.pay-action-button {
+  border-color: #fb7299;
+  background: #fb7299;
+  color: #fff;
+  &:hover,
+  &:focus {
+    border-color: #ff8aac;
+    background: #ff8aac;
+    color: #fff;
+  }
+  &.is-plain {
+    background: #fff;
+    color: #fb7299;
+    &:hover,
+    &:focus {
+      color: #fff;
+    }
+  }
 }
 
 .order-list-panel {
@@ -572,6 +708,10 @@ watch(
     color: #fb7299;
     border-color: #fb7299;
   }
+  &.paid {
+    color: #67c23a;
+    border-color: #67c23a;
+  }
 }
 
 .order-sku {
@@ -594,6 +734,12 @@ watch(
   color: #fb7299;
   font-size: 20px;
   font-weight: 700;
+}
+
+.order-pay-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .load-more {

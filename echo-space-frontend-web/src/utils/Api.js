@@ -81,6 +81,7 @@ const Api = {
     createShopOrder: server_shop + "/order/create",
     getShopOrderDetail: server_shop + "/order/detail",
     loadShopOrder: server_shop + "/order/loadOrder",
+    payShopOrder: server_shop + "/order/pay",
 
     //播放历史
     playHisotry: server_web + "/history/loadHistory",
