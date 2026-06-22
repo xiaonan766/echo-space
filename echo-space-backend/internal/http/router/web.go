@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 
+	filehandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler"
 	webhandler "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/handler/web"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/middleware"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
@@ -10,14 +11,22 @@ import (
 	webservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/web"
 )
 
-func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
+func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps Dependencies) {
 	userRepository := repository.NewUserRepository(deps.DB)
 	accountService := webservice.NewAccountService(deps.Cache, userRepository)
 	accountHandler := webhandler.NewAccountHandler(accountService)
+	uploadingFileStore := cache.NewUploadingFileStore(deps.Redis)
+	sysSettingStore := cache.NewSysSettingStore(deps.Cache, "echo-space:sys_setting")
+	videoUploadService := webservice.NewVideoUploadService(uploadingFileStore, sysSettingStore, deps.Config.File.ResourceRoot)
+	videoUploadHandler := webhandler.NewVideoUploadHandler(videoUploadService)
+	webFileHandler := filehandler.NewFileHandler(deps.Config.File)
 
 	categoryRepository := repository.NewCategoryRepository(deps.DB)
 	categoryService := webservice.NewCategoryService(categoryRepository)
 	categoryHandler := webhandler.NewCategoryHandler(categoryService)
+	videoRepository := repository.NewVideoRepository(deps.DB)
+	videoService := webservice.NewVideoService(videoRepository)
+	videoHandler := webhandler.NewVideoHandler(videoService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
 	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
@@ -35,9 +44,17 @@ func registerWebRoutes(group *gin.RouterGroup, deps Dependencies) {
 	accountGroup.POST("/login", accountHandler.Login)
 	accountGroup.POST("/logout", middleware.WebAuth(accountService), accountHandler.Logout)
 
+	fileGroup.POST("/preUploadVideo", middleware.WebAuth(accountService), videoUploadHandler.PreUploadVideo)
+	fileGroup.POST("/uploadVideo", middleware.WebAuth(accountService), videoUploadHandler.UploadVideo)
+	fileGroup.POST("/uploadImage", middleware.WebAuth(accountService), webFileHandler.UploadImage)
+
 	categoryGroup := group.Group("/category")
 	categoryGroup.GET("/loadAllCategory", categoryHandler.LoadAllCategory)
 	categoryGroup.POST("/loadAllCategory", categoryHandler.LoadAllCategory)
+
+	videoGroup := group.Group("/video")
+	videoGroup.GET("/loadVideo", videoHandler.LoadVideo)
+	videoGroup.POST("/loadVideo", videoHandler.LoadVideo)
 
 	shopGroup := group.Group("/shop")
 	shopGroup.GET("/loadRecommend", shopHandler.LoadRecommend)

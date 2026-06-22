@@ -39,7 +39,7 @@ func New(deps Dependencies) *gin.Engine {
 	fileGroup.GET("/getResource", fileHandler.GetResource)
 
 	registerAdminRoutes(engine.Group("/admin"), deps)
-	registerWebRoutes(engine.Group("/web"), deps)
+	registerWebRoutes(engine.Group("/web"), fileGroup, deps)
 
 	return engine
 }

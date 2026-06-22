@@ -52,6 +52,11 @@ type SavePeripheralSKUInput struct {
 
 const peripheralStockPrewarmWindow = 5 * time.Minute
 
+type peripheralStockPrewarmResult struct {
+	ShouldPrewarm bool
+	ImmediateSale bool
+}
+
 func NewShopService(shopRepository *repository.ShopRepository, recommendStore *cache.ShopRecommendStore, stockStore *cache.ShopStockStore) *ShopService {
 	return &ShopService{
 		shopRepository: shopRepository,
@@ -145,7 +150,11 @@ func (s *ShopService) SavePeripheral(ctx context.Context, input SavePeripheralIn
 	if saveResult.ProductID > 0 {
 		s.deletePeripheralShopCache(ctx, saveResult.ProductID, input.Status == domain.ProductStatusOffShelf)
 		if saveResult.ShouldPrewarm {
-			s.prewarmPeripheralStockIfReady(ctx, saveResult.ProductID, saleStartTime)
+			prewarmResult, err := s.prewarmPeripheralStockIfReady(ctx, saveResult.ProductID, saleStartTime)
+			if err != nil && prewarmResult.ImmediateSale {
+				s.rollbackPeripheralOnShelfAfterPrewarmFailed(ctx, saveResult.ProductID, err)
+				return &BusinessError{Info: "商品立即开售时必须先完成库存预热，请检查 Redis 后重新上架"}
+			}
 		}
 	} else {
 		s.deleteHotPeripheralRecommendCache(ctx)
@@ -168,7 +177,11 @@ func (s *ShopService) ChangePeripheralStatus(ctx context.Context, productID uint
 
 	s.deletePeripheralShopCache(ctx, productID, status == domain.ProductStatusOffShelf)
 	if changeResult.ShouldPrewarm {
-		s.prewarmPeripheralStockByProduct(ctx, productID)
+		prewarmResult, err := s.prewarmPeripheralStockByProduct(ctx, productID)
+		if err != nil && prewarmResult.ImmediateSale {
+			s.rollbackPeripheralOnShelfAfterPrewarmFailed(ctx, productID, err)
+			return &BusinessError{Info: "商品立即开售时必须先完成库存预热，请检查 Redis 后重新上架"}
+		}
 	}
 	return nil
 }
@@ -197,31 +210,59 @@ func (s *ShopService) deleteHotPeripheralRecommendCache(ctx context.Context) {
 	}
 }
 
-func (s *ShopService) prewarmPeripheralStockIfReady(ctx context.Context, productID uint64, saleStartTime *time.Time) {
-	if !shouldPrewarmPeripheralStock(saleStartTime, time.Now()) {
-		return
+func (s *ShopService) prewarmPeripheralStockIfReady(ctx context.Context, productID uint64, saleStartTime *time.Time) (peripheralStockPrewarmResult, error) {
+	now := time.Now()
+	result := peripheralStockPrewarmResult{
+		ShouldPrewarm: shouldPrewarmPeripheralStock(saleStartTime, now),
+		ImmediateSale: isImmediatePeripheralSale(saleStartTime, now),
 	}
-	s.prewarmPeripheralStockByProduct(ctx, productID)
+	if !result.ShouldPrewarm {
+		return result, nil
+	}
+	_, err := s.prewarmPeripheralStockByProduct(ctx, productID)
+	return result, err
 }
 
-func (s *ShopService) prewarmPeripheralStockByProduct(ctx context.Context, productID uint64) {
+func (s *ShopService) prewarmPeripheralStockByProduct(ctx context.Context, productID uint64) (peripheralStockPrewarmResult, error) {
+	result := peripheralStockPrewarmResult{}
 	if s.stockStore == nil || productID == 0 {
-		return
+		return result, nil
 	}
 
 	list, err := s.shopRepository.ListPeripheralSKUStockForPrewarm(ctx, productID)
 	if err != nil {
 		log.Printf("list peripheral sku stock for prewarm failed: productID=%d err=%v", productID, err)
-		return
+		return result, err
 	}
-	if len(list) == 0 || !shouldPrewarmPeripheralStock(list[0].SaleStartTime, time.Now()) {
-		return
+	if len(list) == 0 {
+		return result, nil
 	}
+
+	now := time.Now()
+	result.ShouldPrewarm = shouldPrewarmPeripheralStock(list[0].SaleStartTime, now)
+	result.ImmediateSale = isImmediatePeripheralSale(list[0].SaleStartTime, now)
+	if !result.ShouldPrewarm {
+		return result, nil
+	}
+
+	var firstErr error
 	for _, item := range list {
 		if err := s.stockStore.PrewarmSKUStock(ctx, item.SkuID, item.AvailableStock); err != nil {
 			log.Printf("prewarm peripheral sku stock failed: productID=%d skuID=%d err=%v", item.ProductID, item.SkuID, err)
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
+	return result, firstErr
+}
+
+func (s *ShopService) rollbackPeripheralOnShelfAfterPrewarmFailed(ctx context.Context, productID uint64, prewarmErr error) {
+	if err := s.shopRepository.RollbackPeripheralOnShelf(ctx, productID); err != nil {
+		log.Printf("rollback peripheral on shelf after stock prewarm failed: productID=%d prewarmErr=%v rollbackErr=%v", productID, prewarmErr, err)
+		return
+	}
+	s.deletePeripheralShopCache(ctx, productID, true)
 }
 
 func shouldPrewarmPeripheralStock(saleStartTime *time.Time, now time.Time) bool {
@@ -229,6 +270,10 @@ func shouldPrewarmPeripheralStock(saleStartTime *time.Time, now time.Time) bool 
 		return true
 	}
 	return !saleStartTime.After(now.Add(peripheralStockPrewarmWindow))
+}
+
+func isImmediatePeripheralSale(saleStartTime *time.Time, now time.Time) bool {
+	return saleStartTime == nil || !saleStartTime.After(now)
 }
 
 func normalizePeripheralListInput(input PeripheralListInput) PeripheralListInput {

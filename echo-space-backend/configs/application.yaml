@@ -20,6 +20,8 @@ rabbitmq:
   url: "amqp://guest:guest@localhost:5672/"
   cacheRecoveryQueue: "echo-space.shop.cache.recovery"
   stockLockQueue: "echo-space.shop.stock.lock"
+  videoTranscodeQueue: "echo-space.video.transcode"
+  videoTranscodePrefetch: 1
   prefetchCount: 20
 
 admin:

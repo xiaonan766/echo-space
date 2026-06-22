@@ -36,11 +36,7 @@ func NewRabbitClient(_ context.Context, cfg config.RabbitMQConfig) (*RabbitClien
 		return nil, errors.New("rabbitmq url is empty")
 	}
 
-	client := &RabbitClient{url: url}
-	if err := client.reconnectLocked(); err != nil {
-		return nil, fmt.Errorf("connect rabbitmq: %w", err)
-	}
-	return client, nil
+	return &RabbitClient{url: url}, nil
 }
 
 func (c *RabbitClient) Channel() (*amqp.Channel, error) {

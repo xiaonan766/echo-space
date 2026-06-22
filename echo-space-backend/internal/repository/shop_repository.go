@@ -422,6 +422,15 @@ func (r *ShopRepository) ChangePeripheralStatus(ctx context.Context, productID u
 	return changeResult, err
 }
 
+func (r *ShopRepository) RollbackPeripheralOnShelf(ctx context.Context, productID uint64) error {
+	if productID == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&domain.ShopProduct{}).
+		Where("product_id = ? AND product_type = ? AND status = ?", productID, domain.ProductTypePeripheral, domain.ProductStatusOnShelf).
+		Update("status", domain.ProductStatusOffShelf).Error
+}
+
 func (r *ShopRepository) ListPeripheralSKUStockForPrewarm(ctx context.Context, productID uint64) ([]SKUStockPrewarmItem, error) {
 	var list []SKUStockPrewarmItem
 	err := r.db.WithContext(ctx).Table("shop_product sp").

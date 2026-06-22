@@ -61,6 +61,8 @@ type RabbitMQConfig struct {
 	URL                string `yaml:"url"`
 	CacheRecoveryQueue string `yaml:"cacheRecoveryQueue"`
 	StockLockQueue     string `yaml:"stockLockQueue"`
+	VideoTranscodeQueue string `yaml:"videoTranscodeQueue"`
+	VideoTranscodePrefetch int `yaml:"videoTranscodePrefetch"`
 	PrefetchCount      int    `yaml:"prefetchCount"`
 }
 
@@ -116,6 +118,8 @@ func defaultConfig() Config {
 			URL:                "amqp://guest:guest@localhost:5672/",
 			CacheRecoveryQueue: "echo-space.shop.cache.recovery",
 			StockLockQueue:     "echo-space.shop.stock.lock",
+			VideoTranscodeQueue: "echo-space.video.transcode",
+			VideoTranscodePrefetch: 1,
 			PrefetchCount:      20,
 		},
 		Admin: AdminConfig{
@@ -183,6 +187,8 @@ func applyEnvOverrides(cfg *Config) {
 	cfg.RabbitMQ.URL = envString("RABBITMQ_URL", cfg.RabbitMQ.URL)
 	cfg.RabbitMQ.CacheRecoveryQueue = envString("RABBITMQ_CACHE_RECOVERY_QUEUE", cfg.RabbitMQ.CacheRecoveryQueue)
 	cfg.RabbitMQ.StockLockQueue = envString("RABBITMQ_STOCK_LOCK_QUEUE", cfg.RabbitMQ.StockLockQueue)
+	cfg.RabbitMQ.VideoTranscodeQueue = envString("RABBITMQ_VIDEO_TRANSCODE_QUEUE", cfg.RabbitMQ.VideoTranscodeQueue)
+	cfg.RabbitMQ.VideoTranscodePrefetch = envInt("RABBITMQ_VIDEO_TRANSCODE_PREFETCH", cfg.RabbitMQ.VideoTranscodePrefetch)
 	cfg.RabbitMQ.PrefetchCount = envInt("RABBITMQ_PREFETCH_COUNT", cfg.RabbitMQ.PrefetchCount)
 
 	cfg.Admin.Account = envString("ADMIN_ACCOUNT", cfg.Admin.Account)
