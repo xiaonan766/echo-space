@@ -42,6 +42,12 @@
             <el-checkbox value="1">关闭评论</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
+        <el-form-item class="download-setting-item" label="下载设置" prop="downloadPermission">
+          <el-radio-group v-model="formData.downloadPermission">
+            <el-radio :value="1">允许下载</el-radio>
+            <el-radio :value="0">禁止下载</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="">
           <el-button type="primary" @click="submitForm">立即投稿</el-button>
           <el-button @click="router.push('/ucenter/video')">取消</el-button>
@@ -82,14 +88,17 @@ mitter.on('startUpload', (fileName) => {
   startUpload.value = true
   nextTick(() => {
     formDataRef.value.resetFields()
-    formData.value = {}
-    formData.value.tags = []
-    formData.value.videoName = fileName
+    formData.value = {
+      tags: [],
+      videoName: fileName,
+      downloadPermission: 1,
+    }
   })
 })
 
 const formData = ref({
   tags: [],
+  downloadPermission: 1,
 })
 const formDataRef = ref()
 const rules = {
@@ -99,6 +108,9 @@ const rules = {
   originInfo: [{ required: true, message: '转载说明不能为空' }],
   categoryArray: [{ required: true, message: '分区不能为空' }],
   tags: [{ required: true, message: '标签不能为空' }],
+  downloadPermission: [
+    { required: true, message: '请选择视频下载设置' },
+  ],
 }
 
 provide('cutImageCallback', ({ coverImage }) => {
@@ -171,6 +183,8 @@ const init = async () => {
       return
     }
     formData.value = result.data.videoInfo
+    formData.value.downloadPermission =
+      formData.value.downloadPermission ?? 1
     //处理tags
     formData.value.tags = formData.value.tags.split(',')
     //处理分类
@@ -228,5 +242,8 @@ onUnmounted(() => {
 }
 .video-form {
   padding-right: 200px;
+}
+:deep(.download-setting-item .el-form-item__label) {
+  white-space: nowrap;
 }
 </style>

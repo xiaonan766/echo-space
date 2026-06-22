@@ -14,11 +14,12 @@ import (
 )
 
 type Dependencies struct {
-	Config             config.Config
-	Redis              *redis.Client
-	Cache              *cache.HybridCache
-	DB                 *gorm.DB
-	StockLockPublisher *mq.ShopStockLockPublisher
+	Config                  config.Config
+	Redis                   *redis.Client
+	Cache                   *cache.HybridCache
+	DB                      *gorm.DB
+	StockLockPublisher      *mq.ShopStockLockPublisher
+	VideoTranscodePublisher *mq.VideoTranscodePublisher
 }
 
 func New(deps Dependencies) *gin.Engine {

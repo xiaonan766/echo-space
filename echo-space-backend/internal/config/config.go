@@ -58,12 +58,12 @@ func (c MySQLConfig) ConnMaxLifetimeDuration() time.Duration {
 }
 
 type RabbitMQConfig struct {
-	URL                string `yaml:"url"`
-	CacheRecoveryQueue string `yaml:"cacheRecoveryQueue"`
-	StockLockQueue     string `yaml:"stockLockQueue"`
-	VideoTranscodeQueue string `yaml:"videoTranscodeQueue"`
-	VideoTranscodePrefetch int `yaml:"videoTranscodePrefetch"`
-	PrefetchCount      int    `yaml:"prefetchCount"`
+	URL                    string `yaml:"url"`
+	CacheRecoveryQueue     string `yaml:"cacheRecoveryQueue"`
+	StockLockQueue         string `yaml:"stockLockQueue"`
+	VideoTranscodeQueue    string `yaml:"videoTranscodeQueue"`
+	VideoTranscodePrefetch int    `yaml:"videoTranscodePrefetch"`
+	PrefetchCount          int    `yaml:"prefetchCount"`
 }
 
 type AdminConfig struct {
@@ -115,12 +115,12 @@ func defaultConfig() Config {
 			AutoMigrate:     false,
 		},
 		RabbitMQ: RabbitMQConfig{
-			URL:                "amqp://guest:guest@localhost:5672/",
-			CacheRecoveryQueue: "echo-space.shop.cache.recovery",
-			StockLockQueue:     "echo-space.shop.stock.lock",
-			VideoTranscodeQueue: "echo-space.video.transcode",
+			URL:                    "amqp://guest:guest@localhost:5672/",
+			CacheRecoveryQueue:     "echo-space.shop.cache.recovery",
+			StockLockQueue:         "echo-space.shop.stock.lock",
+			VideoTranscodeQueue:    "echo-space.video.transcode",
 			VideoTranscodePrefetch: 1,
-			PrefetchCount:      20,
+			PrefetchCount:          20,
 		},
 		Admin: AdminConfig{
 			Account:  "admin",

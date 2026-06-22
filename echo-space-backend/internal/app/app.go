@@ -27,6 +27,7 @@ type App struct {
 	rabbit                    *mq.RabbitClient
 	shopCacheRecoveryConsumer *mq.ShopCacheRecoveryConsumer
 	shopStockLockConsumer     *mq.ShopStockLockConsumer
+	videoTranscodeConsumer    *mq.VideoTranscodeConsumer
 	backgroundCancel          context.CancelFunc
 	router                    http.Handler
 }
@@ -54,19 +55,21 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		}
 	}
 
-	rabbitClient := setupRabbit(ctx, cfg)
-	shopCacheRecoveryConsumer := setupShopCacheRecovery(ctx, cfg, hybridCache, redisClient, mysqlDB, rabbitClient)
-	stockLockPublisher, shopStockLockConsumer := setupShopStockLock(ctx, cfg, redisClient, mysqlDB, rabbitClient)
 	backgroundCtx, backgroundCancel := context.WithCancel(context.Background())
+	rabbitClient := setupRabbit(ctx, cfg)
+	shopCacheRecoveryConsumer := setupShopCacheRecovery(backgroundCtx, cfg, hybridCache, redisClient, mysqlDB, rabbitClient)
+	stockLockPublisher, shopStockLockConsumer := setupShopStockLock(backgroundCtx, cfg, redisClient, mysqlDB, rabbitClient)
+	videoTranscodePublisher, videoTranscodeConsumer := setupVideoTranscode(backgroundCtx, cfg, redisClient, mysqlDB, rabbitClient)
 	setupShopOrderRecovery(backgroundCtx, redisClient, mysqlDB, stockLockPublisher)
 	setupShopStockPrewarm(backgroundCtx, redisClient, mysqlDB)
 
 	router := approuter.New(approuter.Dependencies{
-		Config:             cfg,
-		Redis:              redisClient,
-		Cache:              hybridCache,
-		DB:                 mysqlDB,
-		StockLockPublisher: stockLockPublisher,
+		Config:                  cfg,
+		Redis:                   redisClient,
+		Cache:                   hybridCache,
+		DB:                      mysqlDB,
+		StockLockPublisher:      stockLockPublisher,
+		VideoTranscodePublisher: videoTranscodePublisher,
 	})
 
 	return &App{
@@ -77,6 +80,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		rabbit:                    rabbitClient,
 		shopCacheRecoveryConsumer: shopCacheRecoveryConsumer,
 		shopStockLockConsumer:     shopStockLockConsumer,
+		videoTranscodeConsumer:    videoTranscodeConsumer,
 		backgroundCancel:          backgroundCancel,
 		router:                    router,
 	}, nil
@@ -92,6 +96,9 @@ func (a *App) Close() {
 	}
 	if a.shopStockLockConsumer != nil {
 		a.shopStockLockConsumer.Close()
+	}
+	if a.videoTranscodeConsumer != nil {
+		a.videoTranscodeConsumer.Close()
 	}
 	if a.shopCacheRecoveryConsumer != nil {
 		a.shopCacheRecoveryConsumer.Close()
@@ -123,10 +130,30 @@ func closeDB(db *gorm.DB) {
 func setupRabbit(ctx context.Context, cfg config.Config) *mq.RabbitClient {
 	rabbitClient, err := mq.NewRabbitClient(ctx, cfg.RabbitMQ)
 	if err != nil {
-		log.Printf("rabbitmq unavailable, async shop tasks will be disabled: %v", err)
+		log.Printf("rabbitmq configuration is invalid, async tasks will be disabled: %v", err)
 		return nil
 	}
 	return rabbitClient
+}
+
+func setupVideoTranscode(ctx context.Context, cfg config.Config, redisClient *redis.Client, mysqlDB *gorm.DB, rabbitClient *mq.RabbitClient) (*mq.VideoTranscodePublisher, *mq.VideoTranscodeConsumer) {
+	if rabbitClient == nil {
+		log.Printf("video transcode publisher is disabled because rabbitmq is not configured")
+		return nil, nil
+	}
+
+	repo := repository.NewVideoPostRepository(mysqlDB)
+	uploadStore := cache.NewUploadingFileStore(redisClient)
+	publisher := mq.NewVideoTranscodePublisher(rabbitClient, cfg.RabbitMQ.VideoTranscodeQueue)
+	service := webservice.NewVideoTranscodeService(repo, uploadStore, publisher, cfg.File.ResourceRoot)
+	consumer := mq.NewVideoTranscodeConsumer(rabbitClient, cfg.RabbitMQ.VideoTranscodeQueue, cfg.RabbitMQ.VideoTranscodePrefetch, service)
+	if err := consumer.Start(ctx); err != nil {
+		log.Printf("start video transcode consumer failed: %v", err)
+		return publisher, nil
+	}
+	service.StartOutboxPublisher(ctx)
+	log.Printf("video transcode consumer started, queue=%s", cfg.RabbitMQ.VideoTranscodeQueue)
+	return publisher, consumer
 }
 
 func setupShopCacheRecovery(ctx context.Context, cfg config.Config, hybridCache *cache.HybridCache, redisClient *redis.Client, mysqlDB *gorm.DB, rabbitClient *mq.RabbitClient) *mq.ShopCacheRecoveryConsumer {

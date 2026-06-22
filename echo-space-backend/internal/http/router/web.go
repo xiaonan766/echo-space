@@ -19,11 +19,14 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	sysSettingStore := cache.NewSysSettingStore(deps.Cache, "echo-space:sys_setting")
 	videoUploadService := webservice.NewVideoUploadService(uploadingFileStore, sysSettingStore, deps.Config.File.ResourceRoot)
 	videoUploadHandler := webhandler.NewVideoUploadHandler(videoUploadService)
+	videoPostRepository := repository.NewVideoPostRepository(deps.DB)
 	webFileHandler := filehandler.NewFileHandler(deps.Config.File)
 
 	categoryRepository := repository.NewCategoryRepository(deps.DB)
 	categoryService := webservice.NewCategoryService(categoryRepository)
 	categoryHandler := webhandler.NewCategoryHandler(categoryService)
+	videoPostService := webservice.NewVideoPostService(videoPostRepository, categoryRepository, uploadingFileStore, sysSettingStore, deps.VideoTranscodePublisher, deps.Config.File.ResourceRoot)
+	videoPostHandler := webhandler.NewVideoPostHandler(videoPostService)
 	videoRepository := repository.NewVideoRepository(deps.DB)
 	videoService := webservice.NewVideoService(videoRepository)
 	videoHandler := webhandler.NewVideoHandler(videoService)
@@ -43,6 +46,9 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	accountGroup.POST("/register", accountHandler.Register)
 	accountGroup.POST("/login", accountHandler.Login)
 	accountGroup.POST("/logout", middleware.WebAuth(accountService), accountHandler.Logout)
+
+	ucenterGroup := group.Group("/ucenter", middleware.WebAuth(accountService))
+	ucenterGroup.POST("/postVideo", videoPostHandler.PostVideo)
 
 	fileGroup.POST("/preUploadVideo", middleware.WebAuth(accountService), videoUploadHandler.PreUploadVideo)
 	fileGroup.POST("/uploadVideo", middleware.WebAuth(accountService), videoUploadHandler.UploadVideo)

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS video_transcode_message (
     retry_count INT NOT NULL DEFAULT 0 COMMENT '转码失败次数',
     next_retry_time DATETIME NULL COMMENT '下次发布时间',
     locked_until DATETIME NULL COMMENT '处理租约截止时间',
+    lock_token VARCHAR(32) NOT NULL DEFAULT '' COMMENT '本次处理租约令牌',
     last_error VARCHAR(500) NOT NULL DEFAULT '' COMMENT '最后错误',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
