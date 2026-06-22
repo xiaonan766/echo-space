@@ -12,3 +12,5 @@
 <img width="1908" height="983" alt="image" src="https://github.com/user-attachments/assets/2bab2625-e942-43b7-95fb-866efe7c4c7b" />
 订单列表页面
 <img width="1919" height="985" alt="image" src="https://github.com/user-attachments/assets/c45330e6-77b1-4397-b498-de3cbe9847bc" />
+上传视频页面
+<img width="1919" height="974" alt="image" src="https://github.com/user-attachments/assets/73e244da-1c1b-4a8b-844f-98ef957da413" />
