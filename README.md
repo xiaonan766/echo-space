@@ -17,6 +17,8 @@
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/4fea49f5-427f-4851-88d4-23f67ae82260" />
 稿件管理页面
 <img width="1917" height="987" alt="image" src="https://github.com/user-attachments/assets/b7e196ad-fe13-42ba-a343-071175275e85" />
+<img width="1919" height="991" alt="image" src="https://github.com/user-attachments/assets/6bb5188a-2060-4be8-9dd8-4e469317c0b0" />
+
 ————  ————   ———  ——— ———  —————— 
 
 管理端：
