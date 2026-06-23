@@ -69,6 +69,17 @@ func (r *UserRepository) FindByNickName(ctx context.Context, nickName string) (*
 	return &user, nil
 }
 
+func (r *UserRepository) FindByUserID(ctx context.Context, userID string) (*domain.UserInfo, error) {
+	var user domain.UserInfo
+	err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (r *UserRepository) ExistsByUserID(ctx context.Context, userID string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
@@ -98,6 +109,24 @@ func (r *UserRepository) UpdateLoginInfo(ctx context.Context, userID string, log
 			"last_login_time": loginTime,
 			"last_login_ip":   loginIP,
 		}).Error
+}
+
+func (r *UserRepository) CountFocus(ctx context.Context, userID string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("user_focus").
+		Where("user_id = ?", userID).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *UserRepository) CountFans(ctx context.Context, userID string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("user_focus").
+		Where("focus_user_id = ?", userID).
+		Count(&count).Error
+	return count, err
 }
 
 func (r *UserRepository) applyListQuery(db *gorm.DB, query UserListQuery) *gorm.DB {

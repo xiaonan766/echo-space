@@ -27,12 +27,13 @@ func (s *SettingService) GetSetting(ctx context.Context) (domain.SysSetting, err
 	if !exists {
 		return domain.DefaultSysSetting(), nil
 	}
-	return setting, nil
+	return domain.NormalizeSysSetting(setting), nil
 }
 
 func (s *SettingService) SaveSetting(ctx context.Context, setting domain.SysSetting) error {
+	setting = domain.NormalizeSysSetting(setting)
 	if !validSysSetting(setting) {
-		return &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
+		return &BusinessError{Info: "参数错误"}
 	}
 	return s.settingStore.Save(ctx, setting)
 }
@@ -44,5 +45,13 @@ func validSysSetting(setting domain.SysSetting) bool {
 		setting.VideoPCount > 0 &&
 		setting.VideoCount > 0 &&
 		setting.CommentCount > 0 &&
-		setting.DanmuCount > 0
+		setting.DanmuCount > 0 &&
+		setting.DanmuUserRateCount > 0 &&
+		setting.DanmuUserRateSeconds > 0 &&
+		setting.DanmuUserVideoRateCount > 0 &&
+		setting.DanmuUserVideoRateSeconds > 0 &&
+		setting.DanmuIPRateCount > 0 &&
+		setting.DanmuIPRateSeconds > 0 &&
+		setting.DanmuVideoRateCount > 0 &&
+		setting.DanmuVideoRateSeconds > 0
 }

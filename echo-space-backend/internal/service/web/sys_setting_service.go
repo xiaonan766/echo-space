@@ -27,5 +27,5 @@ func (s *SysSettingService) GetSetting(ctx context.Context) (domain.SysSetting, 
 	if !exists {
 		return domain.DefaultSysSetting(), nil
 	}
-	return setting, nil
+	return domain.NormalizeSysSetting(setting), nil
 }

@@ -102,6 +102,7 @@ func (s *VideoInfoService) AuditVideo(ctx context.Context, input AuditVideoInput
 			setting = stored
 		}
 	}
+	setting = domain.NormalizeSysSetting(setting)
 
 	err := s.videoPostRepository.AuditVideo(ctx, repository.AuditVideoData{
 		VideoID:            input.VideoID,

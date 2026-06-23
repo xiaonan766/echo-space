@@ -129,6 +129,31 @@ func (r *InteractRepository) VideoExists(ctx context.Context, videoID string) (b
 	return count > 0, err
 }
 
+func (r *InteractRepository) FindDanmuTarget(ctx context.Context, videoID string, fileID string) (*domain.DanmuTargetInfo, error) {
+	var target domain.DanmuTargetInfo
+	err := r.db.WithContext(ctx).
+		Table("video_info vi").
+		Select("vi.video_id, vf.file_id, COALESCE(vi.interaction, '') AS interaction").
+		Joins("INNER JOIN video_info_file vf ON vf.video_id = vi.video_id AND vf.file_id = ?", fileID).
+		Where("vi.video_id = ?", videoID).
+		Take(&target).Error
+	if err != nil {
+		return nil, err
+	}
+	return &target, nil
+}
+
+func (r *InteractRepository) CreateDanmu(ctx context.Context, danmu domain.VideoDanmu) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&danmu).Error; err != nil {
+			return err
+		}
+		return tx.Table("video_info").
+			Where("video_id = ?", danmu.VideoID).
+			Update("danmu_count", gorm.Expr("danmu_count + ?", 1)).Error
+	})
+}
+
 func (r *InteractRepository) DeleteComment(ctx context.Context, comment domain.CommentDeleteInfo) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Exec("DELETE FROM video_comment WHERE comment_id = ?", comment.CommentID)

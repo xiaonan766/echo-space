@@ -76,6 +76,12 @@ type TokenUserInfo struct {
 	ExpireAt         int64  `json:"expireAt"`
 }
 
+type UserCountInfo struct {
+	FansCount        int `json:"fansCount"`
+	FocusCount       int `json:"focusCount"`
+	CurrentCoinCount int `json:"currentCoinCount"`
+}
+
 func NewAccountService(hybridCache *cache.HybridCache, userRepository *repository.UserRepository) *AccountService {
 	store := cache.NewCaptchaStore(hybridCache, checkCodeKeyPrefix, checkCodeTTL)
 	driver := base64Captcha.NewDriverMath(
@@ -244,6 +250,36 @@ func (s *AccountService) AutoLogin(ctx context.Context, token string) (*TokenUse
 		return nil, err
 	}
 	return info, nil
+}
+
+func (s *AccountService) GetUserCountInfo(ctx context.Context, userID string) (*UserCountInfo, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
+	}
+
+	user, err := s.userRepository.FindByUserID(ctx, userID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, &BusinessError{Info: "\u7528\u6237\u4e0d\u5b58\u5728"}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	focusCount, err := s.userRepository.CountFocus(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	fansCount, err := s.userRepository.CountFans(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UserCountInfo{
+		FansCount:        int(fansCount),
+		FocusCount:       int(focusCount),
+		CurrentCoinCount: user.CurrentCoinCount,
+	}, nil
 }
 
 func (s *AccountService) GetTokenUserInfo(ctx context.Context, token string) (*TokenUserInfo, bool, error) {

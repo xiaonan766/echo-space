@@ -11,7 +11,7 @@ import (
 	webservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/web"
 )
 
-func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps Dependencies) {
+func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, interactGroup *gin.RouterGroup, deps Dependencies) {
 	userRepository := repository.NewUserRepository(deps.DB)
 	accountService := webservice.NewAccountService(deps.Cache, userRepository)
 	accountHandler := webhandler.NewAccountHandler(accountService)
@@ -32,6 +32,10 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	videoHandler := webhandler.NewVideoHandler(videoService)
 	sysSettingService := webservice.NewSysSettingService(sysSettingStore)
 	sysSettingHandler := webhandler.NewSysSettingHandler(sysSettingService)
+	interactRepository := repository.NewInteractRepository(deps.DB)
+	danmuLimiter := cache.NewDanmuRateLimiter(deps.Redis)
+	danmuService := webservice.NewDanmuService(interactRepository, sysSettingStore, danmuLimiter)
+	danmuHandler := webhandler.NewDanmuHandler(danmuService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
 	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
@@ -49,6 +53,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	accountGroup.POST("/login", accountHandler.Login)
 	accountGroup.GET("/autoLogin", accountHandler.AutoLogin)
 	accountGroup.POST("/autoLogin", accountHandler.AutoLogin)
+	accountGroup.GET("/getUserCountInfo", middleware.WebAuth(accountService), accountHandler.GetUserCountInfo)
+	accountGroup.POST("/getUserCountInfo", middleware.WebAuth(accountService), accountHandler.GetUserCountInfo)
 	accountGroup.POST("/logout", middleware.WebAuth(accountService), accountHandler.Logout)
 
 	ucenterGroup := group.Group("/ucenter", middleware.WebAuth(accountService))
@@ -77,6 +83,9 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	sysSettingGroup := group.Group("/sysSetting")
 	sysSettingGroup.GET("/getSetting", sysSettingHandler.GetSetting)
 	sysSettingGroup.POST("/getSetting", sysSettingHandler.GetSetting)
+
+	danmuGroup := interactGroup.Group("/danmu", middleware.WebAuth(accountService))
+	danmuGroup.POST("/postDanmu", danmuHandler.PostDanmu)
 
 	shopGroup := group.Group("/shop")
 	shopGroup.GET("/loadRecommend", shopHandler.LoadRecommend)

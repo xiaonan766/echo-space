@@ -264,9 +264,7 @@ func (s *VideoUploadService) maxVideoSize(ctx context.Context) (int64, error) {
 			setting = stored
 		}
 	}
-	if setting.VideoSize <= 0 {
-		setting = domain.DefaultSysSetting()
-	}
+	setting = domain.NormalizeSysSetting(setting)
 	return int64(setting.VideoSize) * bytesPerMB, nil
 }
 

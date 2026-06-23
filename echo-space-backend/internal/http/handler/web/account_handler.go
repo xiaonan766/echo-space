@@ -96,6 +96,27 @@ func (h *AccountHandler) AutoLogin(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *AccountHandler) GetUserCountInfo(c *gin.Context) {
+	tokenUserInfo, ok := getWebTokenUserInfo(c)
+	if !ok {
+		response.LoginTimeout(c)
+		return
+	}
+
+	result, err := h.accountService.GetUserCountInfo(c.Request.Context(), tokenUserInfo.UserID)
+	if err != nil {
+		if businessError, ok := webservice.IsBusinessError(err); ok {
+			response.BusinessError(c, businessError.Info, nil)
+			return
+		}
+
+		log.Printf("web get user count info: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+	response.Success(c, result)
+}
+
 func (h *AccountHandler) Logout(c *gin.Context) {
 	token := c.GetString(middleware.ContextTokenKey)
 	c.SetCookie(webservice.WebTokenCookieName, "", -1, "/", "", false, false)

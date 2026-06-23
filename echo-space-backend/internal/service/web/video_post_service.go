@@ -385,9 +385,7 @@ func (s *VideoPostService) validatePartCount(ctx context.Context, count int) err
 			setting = stored
 		}
 	}
-	if setting.VideoPCount <= 0 {
-		setting.VideoPCount = domain.DefaultSysSetting().VideoPCount
-	}
+	setting = domain.NormalizeSysSetting(setting)
 	if count > setting.VideoPCount {
 		return &BusinessError{Info: fmt.Sprintf("\u89c6\u9891\u5206P\u6570\u91cf\u4e0d\u80fd\u8d85\u8fc7%d\u4e2a", setting.VideoPCount)}
 	}
