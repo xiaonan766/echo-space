@@ -32,6 +32,10 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	shopStockStore := cache.NewShopStockStore(deps.Redis)
 	shopService := adminservice.NewShopService(shopRepository, shopRecommendStore, shopStockStore)
 	shopHandler := adminhandler.NewShopHandler(shopService)
+	videoPostRepository := repository.NewVideoPostRepository(deps.DB)
+	videoSettingStore := cache.NewSysSettingStore(deps.Cache, "echo-space:sys_setting")
+	videoInfoService := adminservice.NewVideoInfoService(videoPostRepository, videoSettingStore)
+	videoInfoHandler := adminhandler.NewVideoInfoHandler(videoInfoService)
 	fileHandler := filehandler.NewFileHandler(deps.Config.File)
 
 	group.GET("/health", healthHandler.Health)
@@ -72,6 +76,11 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	userGroup.GET("/loadUser", userHandler.LoadUser)
 	userGroup.POST("/loadUser", userHandler.LoadUser)
 	userGroup.POST("/changeStatus", userHandler.ChangeStatus)
+
+	videoInfoGroup := authGroup.Group("/videoInfo")
+	videoInfoGroup.GET("/loadVideoList", videoInfoHandler.LoadVideoList)
+	videoInfoGroup.POST("/loadVideoList", videoInfoHandler.LoadVideoList)
+	videoInfoGroup.POST("/auditVideo", videoInfoHandler.AuditVideo)
 
 	interactGroup := authGroup.Group("/interact")
 	interactGroup.GET("/loadComment", interactHandler.LoadComment)

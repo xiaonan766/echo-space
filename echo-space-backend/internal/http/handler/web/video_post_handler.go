@@ -70,3 +70,37 @@ func (h *VideoPostHandler) PostVideo(c *gin.Context) {
 	}
 	response.Success(c, nil)
 }
+
+func (h *VideoPostHandler) LoadVideoList(c *gin.Context) {
+	tokenUserInfo, ok := getWebTokenUserInfo(c)
+	if !ok {
+		response.LoginTimeout(c)
+		return
+	}
+	var status *int
+	if value := strings.TrimSpace(formOrQuery(c, "status")); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			response.BusinessError(c, "\u7a3f\u4ef6\u72b6\u6001\u4e0d\u6b63\u786e", nil)
+			return
+		}
+		status = &parsed
+	}
+	result, err := h.service.LoadVideoList(c.Request.Context(), webservice.LoadUcenterVideoListInput{
+		UserID:         tokenUserInfo.UserID,
+		PageNo:         parseWebIntWithDefault(formOrQuery(c, "pageNo"), 1),
+		PageSize:       parseWebIntWithDefault(formOrQuery(c, "pageSize"), 15),
+		VideoNameFuzzy: formOrQuery(c, "videoNameFuzzy"),
+		Status:         status,
+	})
+	if err != nil {
+		if businessError, ok := webservice.IsBusinessError(err); ok {
+			response.BusinessError(c, businessError.Info, nil)
+			return
+		}
+		log.Printf("web load ucenter video list: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+	response.Success(c, result)
+}

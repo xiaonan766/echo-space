@@ -20,16 +20,19 @@ import (
 )
 
 const (
-	videoIDLength              = 10
-	videoFileIDLength          = 20
-	videoMessageIDLength       = 32
-	maxVideoCoverLength        = 255
-	maxVideoNameLength         = 100
-	maxVideoTagsLength         = 300
-	maxVideoIntroductionLength = 2000
-	maxVideoOriginInfoLength   = 200
-	maxVideoInteractionLength  = 3
-	maxVideoPartFileNameLength = 200
+	videoIDLength               = 10
+	videoFileIDLength           = 20
+	videoMessageIDLength        = 32
+	maxVideoCoverLength         = 255
+	maxVideoNameLength          = 100
+	maxVideoTagsLength          = 300
+	maxVideoIntroductionLength  = 2000
+	maxVideoOriginInfoLength    = 200
+	maxVideoInteractionLength   = 3
+	maxVideoPartFileNameLength  = 200
+	defaultUcenterVideoPageNo   = 1
+	defaultUcenterVideoPageSize = 15
+	maxUcenterVideoPageSize     = 50
 )
 
 type VideoTranscodePublisher interface {
@@ -56,6 +59,14 @@ type SaveVideoPostInput struct {
 	Introduction   string
 	Interaction    string
 	UploadFileList []VideoPostUploadFile
+}
+
+type LoadUcenterVideoListInput struct {
+	UserID         string
+	PageNo         int
+	PageSize       int
+	VideoNameFuzzy string
+	Status         *int
 }
 
 type VideoPostService struct {
@@ -107,6 +118,58 @@ func (s *VideoPostService) SaveVideoPost(ctx context.Context, input SaveVideoPos
 		return s.createVideoPost(ctx, input)
 	}
 	return s.updateVideoPost(ctx, input)
+}
+
+func (s *VideoPostService) LoadVideoList(ctx context.Context, input LoadUcenterVideoListInput) (domain.PaginationResult[domain.UcenterVideoPostItem], error) {
+	input.UserID = strings.TrimSpace(input.UserID)
+	input.VideoNameFuzzy = strings.TrimSpace(input.VideoNameFuzzy)
+	if input.UserID == "" {
+		return domain.PaginationResult[domain.UcenterVideoPostItem]{}, &BusinessError{Info: "\u8bf7\u5148\u767b\u5f55"}
+	}
+	if utf8.RuneCountInString(input.VideoNameFuzzy) > maxVideoNameLength {
+		return domain.PaginationResult[domain.UcenterVideoPostItem]{}, &BusinessError{Info: "\u641c\u7d22\u5173\u952e\u8bcd\u4e0d\u80fd\u8d85\u8fc7100\u4e2a\u5b57\u7b26"}
+	}
+	if input.Status != nil && (*input.Status < -1 || *input.Status > domain.VideoPostStatusRejected) {
+		return domain.PaginationResult[domain.UcenterVideoPostItem]{}, &BusinessError{Info: "\u7a3f\u4ef6\u72b6\u6001\u4e0d\u6b63\u786e"}
+	}
+	if input.PageNo <= 0 {
+		input.PageNo = defaultUcenterVideoPageNo
+	}
+	if input.PageSize <= 0 {
+		input.PageSize = defaultUcenterVideoPageSize
+	}
+	if input.PageSize > maxUcenterVideoPageSize {
+		input.PageSize = maxUcenterVideoPageSize
+	}
+
+	list, totalCount, err := s.repository.ListUserPostsByPage(ctx, repository.UcenterVideoPostListQuery{
+		UserID: input.UserID, PageNo: input.PageNo, PageSize: input.PageSize,
+		VideoNameFuzzy: input.VideoNameFuzzy, Status: input.Status,
+	})
+	if err != nil {
+		return domain.PaginationResult[domain.UcenterVideoPostItem]{}, err
+	}
+	for index := range list {
+		list[index].StatusName = videoPostStatusName(list[index].Status)
+	}
+	return domain.NewPaginationResult(list, totalCount, input.PageNo, input.PageSize), nil
+}
+
+func videoPostStatusName(status int) string {
+	switch status {
+	case domain.VideoPostStatusTranscoding:
+		return "\u8f6c\u7801\u4e2d"
+	case domain.VideoPostStatusTransferFailed:
+		return "\u8f6c\u7801\u5931\u8d25"
+	case domain.VideoPostStatusPendingReview:
+		return "\u5f85\u5ba1\u6838"
+	case domain.VideoPostStatusApproved:
+		return "\u5ba1\u6838\u901a\u8fc7"
+	case domain.VideoPostStatusRejected:
+		return "\u5ba1\u6838\u672a\u901a\u8fc7"
+	default:
+		return "\u672a\u77e5\u72b6\u6001"
+	}
 }
 
 func (s *VideoPostService) createVideoPost(ctx context.Context, input SaveVideoPostInput) (string, error) {
@@ -410,7 +473,7 @@ func buildVideoPost(input SaveVideoPostInput, videoID string, now time.Time, sta
 	post := domain.VideoInfoPost{
 		VideoID: videoID, VideoCover: input.VideoCover, VideoName: input.VideoName, UserID: input.UserID,
 		CreateTime: now, LastUpdateTime: now, PCategoryID: input.PCategoryID, CategoryID: input.CategoryID,
-		Status: status, PostType: input.PostType, Tags: input.Tags,
+		Status: status, PostType: input.PostType, Tags: input.Tags, DownloadPermission: 1,
 	}
 	post.OriginInfo = optionalString(input.OriginInfo)
 	post.Introduction = optionalString(input.Introduction)

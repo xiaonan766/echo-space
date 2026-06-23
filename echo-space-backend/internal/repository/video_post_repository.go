@@ -14,6 +14,8 @@ import (
 
 var ErrVideoPostNotEditable = errors.New("video post is not editable")
 var ErrVideoTranscodeClaimLost = errors.New("video transcode claim was lost")
+var ErrVideoAuditConflict = errors.New("video audit conflict")
+var ErrVideoNoPublishableFiles = errors.New("video has no publishable files")
 
 type VideoPostRepository struct {
 	db *gorm.DB
@@ -32,10 +34,34 @@ type SaveEditedVideoPostData struct {
 	Messages       []domain.VideoTranscodeMessageRecord
 }
 
+type AuditVideoData struct {
+	VideoID            string
+	Status             int
+	PostVideoCoinCount int
+}
+
 type VideoTranscodeResult struct {
 	FileSize int64
 	FilePath string
 	Duration int
+}
+
+type UcenterVideoPostListQuery struct {
+	UserID         string
+	PageNo         int
+	PageSize       int
+	VideoNameFuzzy string
+	Status         *int
+}
+
+type AdminVideoPostListQuery struct {
+	PageNo         int
+	PageSize       int
+	VideoNameFuzzy string
+	PCategoryID    int
+	CategoryID     int
+	Status         *int
+	RecommendType  *int
 }
 
 func NewVideoPostRepository(db *gorm.DB) *VideoPostRepository {
@@ -60,6 +86,149 @@ func (r *VideoPostRepository) FindPostWithFiles(ctx context.Context, videoID str
 	return &post, files, nil
 }
 
+func (r *VideoPostRepository) ListUserPostsByPage(ctx context.Context, query UcenterVideoPostListQuery) ([]domain.UcenterVideoPostItem, int64, error) {
+	countQuery := applyUcenterVideoPostFilter(r.db.WithContext(ctx).Table("video_info_post v"), query)
+	var totalCount int64
+	if err := countQuery.Count(&totalCount).Error; err != nil {
+		return nil, 0, err
+	}
+
+	listQuery := applyUcenterVideoPostFilter(r.db.WithContext(ctx).Table("video_info_post v"), query)
+	var list []domain.UcenterVideoPostItem
+	offset := (query.PageNo - 1) * query.PageSize
+	err := listQuery.
+		Select(`
+			v.video_id,
+			v.video_cover,
+			v.video_name,
+			v.user_id,
+			COALESCE(u.nick_name, '') AS nick_name,
+			COALESCE(u.avatar, '') AS avatar,
+			DATE_FORMAT(v.create_time, '%Y-%m-%d %H:%i:%s') AS create_time,
+			DATE_FORMAT(v.last_update_time, '%Y-%m-%d %H:%i:%s') AS last_update_time,
+			v.p_category_id,
+			v.category_id,
+			v.status,
+			v.post_type,
+			COALESCE(v.origin_info, '') AS origin_info,
+			COALESCE(v.tags, '') AS tags,
+			COALESCE(v.introduction, '') AS introduction,
+			COALESCE(v.interaction, '') AS interaction,
+			COALESCE(v.duration, 0) AS duration,
+			COALESCE(vi.play_count, 0) AS play_count,
+			COALESCE(vi.like_count, 0) AS like_count,
+			COALESCE(vi.danmu_count, 0) AS danmu_count,
+			COALESCE(vi.comment_count, 0) AS comment_count,
+			COALESCE(vi.coin_count, 0) AS coin_count,
+			COALESCE(vi.collect_count, 0) AS collect_count
+		`).
+		Joins("LEFT JOIN user_info u ON u.user_id = v.user_id").
+		Joins("LEFT JOIN video_info vi ON vi.video_id = v.video_id").
+		Order("v.last_update_time desc").
+		Offset(offset).
+		Limit(query.PageSize).
+		Scan(&list).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return list, totalCount, nil
+}
+
+func applyUcenterVideoPostFilter(db *gorm.DB, query UcenterVideoPostListQuery) *gorm.DB {
+	db = db.Where("v.user_id = ?", query.UserID)
+	if strings.TrimSpace(query.VideoNameFuzzy) != "" {
+		db = db.Where("v.video_name LIKE ?", "%"+strings.TrimSpace(query.VideoNameFuzzy)+"%")
+	}
+	if query.Status == nil {
+		return db
+	}
+	if *query.Status == -1 {
+		return db.Where("v.status IN ?", []int{
+			domain.VideoPostStatusTranscoding,
+			domain.VideoPostStatusTransferFailed,
+			domain.VideoPostStatusPendingReview,
+		})
+	}
+	return db.Where("v.status = ?", *query.Status)
+}
+
+func (r *VideoPostRepository) ListAdminPostsByPage(ctx context.Context, query AdminVideoPostListQuery) ([]domain.AdminVideoPostItem, int64, error) {
+	countQuery := applyAdminVideoPostFilter(
+		r.db.WithContext(ctx).
+			Table("video_info_post v").
+			Joins("LEFT JOIN video_info vi ON vi.video_id = v.video_id"),
+		query,
+	)
+	var totalCount int64
+	if err := countQuery.Count(&totalCount).Error; err != nil {
+		return nil, 0, err
+	}
+
+	listQuery := applyAdminVideoPostFilter(
+		r.db.WithContext(ctx).
+			Table("video_info_post v").
+			Joins("LEFT JOIN video_info vi ON vi.video_id = v.video_id"),
+		query,
+	)
+	var list []domain.AdminVideoPostItem
+	offset := (query.PageNo - 1) * query.PageSize
+	err := listQuery.
+		Select(`
+			v.video_id,
+			COALESCE(v.video_cover, '') AS video_cover,
+			COALESCE(v.video_name, '') AS video_name,
+			v.user_id,
+			COALESCE(u.nick_name, '') AS nick_name,
+			COALESCE(u.avatar, '') AS avatar,
+			DATE_FORMAT(v.create_time, '%Y-%m-%d %H:%i:%s') AS create_time,
+			DATE_FORMAT(v.last_update_time, '%Y-%m-%d %H:%i:%s') AS last_update_time,
+			v.p_category_id,
+			v.category_id,
+			v.status,
+			v.post_type,
+			COALESCE(v.origin_info, '') AS origin_info,
+			COALESCE(v.tags, '') AS tags,
+			COALESCE(v.introduction, '') AS introduction,
+			COALESCE(v.interaction, '') AS interaction,
+			COALESCE(v.duration, 0) AS duration,
+			COALESCE(vi.play_count, 0) AS play_count,
+			COALESCE(vi.like_count, 0) AS like_count,
+			COALESCE(vi.danmu_count, 0) AS danmu_count,
+			COALESCE(vi.comment_count, 0) AS comment_count,
+			COALESCE(vi.coin_count, 0) AS coin_count,
+			COALESCE(vi.collect_count, 0) AS collect_count,
+			COALESCE(vi.recommend_type, 0) AS recommend_type
+		`).
+		Joins("LEFT JOIN user_info u ON u.user_id = v.user_id").
+		Order("v.last_update_time desc").
+		Offset(offset).
+		Limit(query.PageSize).
+		Scan(&list).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return list, totalCount, nil
+}
+
+func applyAdminVideoPostFilter(db *gorm.DB, query AdminVideoPostListQuery) *gorm.DB {
+	if strings.TrimSpace(query.VideoNameFuzzy) != "" {
+		db = db.Where("v.video_name LIKE ?", "%"+strings.TrimSpace(query.VideoNameFuzzy)+"%")
+	}
+	if query.PCategoryID > 0 {
+		db = db.Where("v.p_category_id = ?", query.PCategoryID)
+	}
+	if query.CategoryID > 0 {
+		db = db.Where("v.category_id = ?", query.CategoryID)
+	}
+	if query.Status != nil {
+		db = db.Where("v.status = ?", *query.Status)
+	}
+	if query.RecommendType != nil {
+		db = db.Where("COALESCE(vi.recommend_type, 0) = ?", *query.RecommendType)
+	}
+	return db
+}
+
 func (r *VideoPostRepository) CreatePost(ctx context.Context, data SaveNewVideoPostData) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&data.Post).Error; err != nil {
@@ -74,6 +243,93 @@ func (r *VideoPostRepository) CreatePost(ctx context.Context, data SaveNewVideoP
 			return tx.Create(&data.Messages).Error
 		}
 		return nil
+	})
+}
+
+func (r *VideoPostRepository) AuditVideo(ctx context.Context, data AuditVideoData) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&domain.VideoInfoPost{}).
+			Where("video_id = ? AND status = ?", data.VideoID, domain.VideoPostStatusPendingReview).
+			Update("status", data.Status)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrVideoAuditConflict
+		}
+
+		if err := tx.Model(&domain.VideoInfoFilePost{}).
+			Where("video_id = ? AND update_type <> ?", data.VideoID, domain.VideoFileUpdateDeletePending).
+			Update("update_type", domain.VideoFileUpdateNone).Error; err != nil {
+			return err
+		}
+
+		if data.Status == domain.VideoPostStatusRejected {
+			return nil
+		}
+
+		var post domain.VideoInfoPost
+		if err := tx.Where("video_id = ?", data.VideoID).Take(&post).Error; err != nil {
+			return err
+		}
+
+		var postFiles []domain.VideoInfoFilePost
+		if err := tx.
+			Where("video_id = ? AND update_type <> ? AND transfer_result = ? AND COALESCE(file_path, '') <> ''",
+				data.VideoID, domain.VideoFileUpdateDeletePending, domain.VideoFileTransferSuccess).
+			Order("file_index asc").
+			Find(&postFiles).Error; err != nil {
+			return err
+		}
+		if len(postFiles) == 0 {
+			return ErrVideoNoPublishableFiles
+		}
+
+		var existingVideo domain.VideoInfo
+		err := tx.Where("video_id = ?", data.VideoID).Take(&existingVideo).Error
+		firstPublish := false
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			firstPublish = true
+		} else if err != nil {
+			return err
+		}
+
+		if firstPublish && data.PostVideoCoinCount > 0 {
+			coinResult := tx.Model(&domain.UserInfo{}).
+				Where("user_id = ?", post.UserID).
+				Updates(map[string]any{
+					"total_coin_count":   gorm.Expr("total_coin_count + ?", data.PostVideoCoinCount),
+					"current_coin_count": gorm.Expr("current_coin_count + ?", data.PostVideoCoinCount),
+				})
+			if coinResult.Error != nil {
+				return coinResult.Error
+			}
+			if coinResult.RowsAffected == 0 {
+				return gorm.ErrRecordNotFound
+			}
+		}
+
+		video := buildVideoInfoFromPost(post)
+		if err := tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "video_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"video_cover", "video_name", "user_id", "create_time", "last_update_time",
+				"p_category_id", "category_id", "post_type", "origin_info", "tags",
+				"introduction", "interaction", "download_permission", "duration",
+			}),
+		}).Create(&video).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("video_id = ?", data.VideoID).Delete(&domain.VideoInfoFile{}).Error; err != nil {
+			return err
+		}
+
+		files := make([]domain.VideoInfoFile, 0, len(postFiles))
+		for _, postFile := range postFiles {
+			files = append(files, buildVideoInfoFileFromPost(postFile))
+		}
+		return tx.Create(&files).Error
 	})
 }
 
@@ -150,6 +406,31 @@ func (r *VideoPostRepository) UpdatePost(ctx context.Context, data SaveEditedVid
 		}
 		return nil
 	})
+}
+
+func buildVideoInfoFromPost(post domain.VideoInfoPost) domain.VideoInfo {
+	return domain.VideoInfo{
+		VideoID: post.VideoID, VideoCover: post.VideoCover, VideoName: post.VideoName, UserID: post.UserID,
+		CreateTime: post.CreateTime, LastUpdateTime: post.LastUpdateTime, PCategoryID: post.PCategoryID,
+		CategoryID: post.CategoryID, PostType: post.PostType, OriginInfo: post.OriginInfo, Tags: post.Tags,
+		Introduction: post.Introduction, Interaction: post.Interaction, DownloadPermission: post.DownloadPermission,
+		Duration: post.Duration,
+	}
+}
+
+func buildVideoInfoFileFromPost(file domain.VideoInfoFilePost) domain.VideoInfoFile {
+	filePath := ""
+	if file.FilePath != nil {
+		filePath = *file.FilePath
+	}
+	duration := 0
+	if file.Duration != nil {
+		duration = *file.Duration
+	}
+	return domain.VideoInfoFile{
+		FileID: file.FileID, UserID: file.UserID, VideoID: file.VideoID, FileName: file.FileName,
+		FileIndex: file.FileIndex, FileSize: file.FileSize, FilePath: filePath, Duration: duration,
+	}
 }
 
 func (r *VideoPostRepository) ListTranscodeMessagesForPublish(ctx context.Context, limit int, publishedBefore time.Time) ([]domain.VideoTranscodeMessageRecord, error) {

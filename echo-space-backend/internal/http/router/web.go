@@ -49,6 +49,7 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 
 	ucenterGroup := group.Group("/ucenter", middleware.WebAuth(accountService))
 	ucenterGroup.POST("/postVideo", videoPostHandler.PostVideo)
+	ucenterGroup.POST("/loadVideoList", videoPostHandler.LoadVideoList)
 
 	fileGroup.POST("/preUploadVideo", middleware.WebAuth(accountService), videoUploadHandler.PreUploadVideo)
 	fileGroup.POST("/uploadVideo", middleware.WebAuth(accountService), videoUploadHandler.UploadVideo)
