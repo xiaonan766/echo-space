@@ -546,6 +546,14 @@ func (r *VideoPostRepository) MarkTranscodeMessagePublished(ctx context.Context,
 		}).Error
 }
 
+func (r *VideoPostRepository) FindTranscodeMessageByID(ctx context.Context, messageID string) (*domain.VideoTranscodeMessageRecord, error) {
+	var message domain.VideoTranscodeMessageRecord
+	if err := r.db.WithContext(ctx).Where("message_id = ?", messageID).Take(&message).Error; err != nil {
+		return nil, err
+	}
+	return &message, nil
+}
+
 func (r *VideoPostRepository) DelayTranscodeMessagePublish(ctx context.Context, messageID string, nextRetry time.Time, cause error) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).Model(&domain.VideoTranscodeMessageRecord{}).

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/mq"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
@@ -23,7 +24,7 @@ import (
 const (
 	videoOutboxScanInterval     = 5 * time.Second
 	videoOutboxBatchSize        = 20
-	videoPublishedRetryAge      = 10 * time.Minute
+	videoPublishedRetryAge      = time.Minute
 	videoTranscodeLeaseDuration = 5 * time.Minute
 	videoLeaseRefreshInterval   = time.Minute
 	videoTranscodeMaxRetries    = 3
@@ -74,8 +75,11 @@ func (s *VideoTranscodeService) HandleVideoTranscodeMessage(ctx context.Context,
 		return err
 	}
 	record, claimed, err := s.repository.ClaimTranscodeMessage(ctx, incoming.MessageID, lockToken, s.now().Add(videoTranscodeLeaseDuration))
-	if err != nil || !claimed {
+	if err != nil {
 		return err
+	}
+	if !claimed {
+		return s.handleUnclaimedTranscodeMessage(ctx, incoming.MessageID)
 	}
 
 	var message mq.VideoTranscodeMessage
@@ -112,6 +116,20 @@ func (s *VideoTranscodeService) HandleVideoTranscodeMessage(ctx context.Context,
 		}
 	}
 	return nil
+}
+
+func (s *VideoTranscodeService) handleUnclaimedTranscodeMessage(ctx context.Context, messageID string) error {
+	record, err := s.repository.FindTranscodeMessageByID(ctx, messageID)
+	if err != nil {
+		return err
+	}
+	if record.MessageStatus == domain.VideoTranscodeMessageSuccess || record.MessageStatus == domain.VideoTranscodeMessageDead {
+		return nil
+	}
+	if record.MessageStatus == domain.VideoTranscodeMessageProcessing && record.LockedUntil != nil && record.LockedUntil.After(s.now()) {
+		return nil
+	}
+	return fmt.Errorf("video transcode message was delivered but not claimed: messageID=%s status=%d", messageID, record.MessageStatus)
 }
 
 func (s *VideoTranscodeService) publishPendingMessages(ctx context.Context) {
