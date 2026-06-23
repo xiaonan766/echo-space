@@ -143,6 +143,12 @@ const disabledReason = computed(() => {
   if (props.order.orderStatus === 2) {
     return '抢购失败，无法继续支付。'
   }
+  if (props.order.orderStatus === 4) {
+    return '订单已取消，无法继续支付。'
+  }
+  if (props.order.orderStatus === 5) {
+    return '订单已超时关闭，无法继续支付。'
+  }
   if (!isWaitPay.value) {
     return '当前订单状态暂不支持支付。'
   }
@@ -168,6 +174,12 @@ const statusText = computed(() => {
   if (props.order?.orderStatus === 3) {
     return '已支付'
   }
+  if (props.order?.orderStatus === 4) {
+    return '已取消'
+  }
+  if (props.order?.orderStatus === 5) {
+    return '已超时'
+  }
   return '未知状态'
 })
 
@@ -183,6 +195,12 @@ const statusClass = computed(() => {
   }
   if (props.order?.orderStatus === 3) {
     return 'paid'
+  }
+  if (props.order?.orderStatus === 4) {
+    return 'canceled'
+  }
+  if (props.order?.orderStatus === 5) {
+    return 'timeout'
   }
   return ''
 })
@@ -285,6 +303,15 @@ const formatMoney = (value) => {
   &.paid {
     color: #67c23a;
     border-color: #67c23a;
+  }
+  &.failed {
+    color: #f56c6c;
+    border-color: #f56c6c;
+  }
+  &.canceled,
+  &.timeout {
+    color: #909399;
+    border-color: #c8c9cc;
   }
 }
 

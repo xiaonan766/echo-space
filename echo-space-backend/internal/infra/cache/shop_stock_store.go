@@ -123,6 +123,36 @@ redis.call("EXPIRE", reservationKey, releasedTTL)
 return 1
 `
 
+const releaseLockedReservationScript = `
+local reservationKey = KEYS[1]
+local stockKey = KEYS[2]
+local timeoutKey = KEYS[3]
+local orderNo = ARGV[1]
+local buyCount = tonumber(ARGV[2])
+local now = ARGV[3]
+local releasedTTL = tonumber(ARGV[4])
+local stockTTL = tonumber(ARGV[5])
+
+local status = redis.call("HGET", reservationKey, "status")
+if status == "RELEASED" then
+	redis.call("ZREM", timeoutKey, orderNo)
+	redis.call("EXPIRE", reservationKey, releasedTTL)
+	return {0, "released"}
+end
+
+if buyCount > 0 and redis.call("EXISTS", stockKey) == 1 then
+	redis.call("INCRBY", stockKey, buyCount)
+	redis.call("EXPIRE", stockKey, stockTTL)
+end
+
+if status then
+	redis.call("HMSET", reservationKey, "status", "RELEASED", "releaseAt", now)
+	redis.call("EXPIRE", reservationKey, releasedTTL)
+end
+redis.call("ZREM", timeoutKey, orderNo)
+return {1, "released"}
+`
+
 type StockPreDeductResult int
 
 const (
@@ -282,6 +312,21 @@ func (s *ShopStockStore) ReleaseReservation(ctx context.Context, orderNo string)
 		skuStockKey(reservation.SkuID),
 		shopReservationTimeoutKey,
 	}, orderNo, time.Now().Unix(), int(shopReleasedReservationTTL.Seconds()), int(shopSKUStockTTL.Seconds())).Err()
+}
+
+func (s *ShopStockStore) ReleaseLockedReservation(ctx context.Context, orderNo string, skuID uint64, buyCount int) error {
+	if s == nil || s.redis == nil {
+		return nil
+	}
+	orderNo = strings.TrimSpace(orderNo)
+	if orderNo == "" || skuID == 0 || buyCount <= 0 {
+		return nil
+	}
+	return s.redis.Eval(ctx, releaseLockedReservationScript, []string{
+		reservationKey(orderNo),
+		skuStockKey(skuID),
+		shopReservationTimeoutKey,
+	}, orderNo, buyCount, time.Now().Unix(), int(shopReleasedReservationTTL.Seconds()), int(shopSKUStockTTL.Seconds())).Err()
 }
 
 func (s *ShopStockStore) ListExpiredReservations(ctx context.Context, nowUnix int64, limit int64) ([]string, error) {

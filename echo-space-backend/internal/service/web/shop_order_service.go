@@ -28,6 +28,7 @@ const (
 	orderMessageRetryDelay    = 30 * time.Second
 	orderMessageRetryInterval = 5 * time.Second
 	orderReservationInterval  = 30 * time.Second
+	orderExpiredCloseInterval = 30 * time.Second
 	orderRecoveryBatchSize    = 100
 	maxOrderMessageRetryCount = 10
 	defaultOrderSkuName       = "默认规格"
@@ -201,6 +202,36 @@ func (s *ShopOrderService) LoadOrder(ctx context.Context, userID string, pageNo 
 	return domain.NewPaginationResult(list, totalCount, pageNo, pageSize), nil
 }
 
+func (s *ShopOrderService) CancelOrder(ctx context.Context, userID string, orderNo string) (*domain.WebShopOrderItem, error) {
+	userID = strings.TrimSpace(userID)
+	orderNo = strings.TrimSpace(orderNo)
+	if userID == "" {
+		return nil, &BusinessError{Info: "请先登录"}
+	}
+	if orderNo == "" {
+		return nil, &BusinessError{Info: "参数错误"}
+	}
+
+	result, err := s.orderRepository.CloseUnpaidOrder(ctx, repository.CloseShopOrderData{
+		OrderNo:      orderNo,
+		UserID:       userID,
+		TargetStatus: domain.OrderStatusCanceled,
+		Now:          time.Now(),
+	})
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, &BusinessError{Info: "订单不存在"}
+	}
+	if errors.Is(err, repository.ErrOrderCannotClose) {
+		return nil, &BusinessError{Info: "当前订单状态不支持取消"}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	s.syncClosedOrderStock(context.Background(), result)
+	return s.GetOrderDetail(ctx, userID, orderNo)
+}
+
 func (s *ShopOrderService) HandleShopStockLockMessage(ctx context.Context, message mq.ShopStockLockMessage) error {
 	if strings.TrimSpace(message.OrderNo) == "" || message.SkuID == 0 || message.BuyCount <= 0 {
 		return nil
@@ -214,6 +245,12 @@ func (s *ShopOrderService) HandleShopStockLockMessage(ctx context.Context, messa
 		if markErr := s.stockStore.MarkReservationLocked(ctx, message.OrderNo); markErr != nil {
 			log.Printf("mark stock reservation locked failed: orderNo=%s err=%v", message.OrderNo, markErr)
 		}
+		return nil
+	}
+	if errors.Is(err, repository.ErrOrderStockLockSkipped) {
+		_ = s.orderRepository.MarkStockLockMessageConsumedFailed(ctx, message.OrderNo, err.Error())
+		_ = s.stockStore.ReleaseReservation(ctx, message.OrderNo)
+		log.Printf("skip shop stock lock message because order is closed: orderNo=%s skuID=%d", message.OrderNo, message.SkuID)
 		return nil
 	}
 	if errors.Is(err, repository.ErrOrderStockInsufficient) {
@@ -279,9 +316,21 @@ func (s *ShopOrderService) RecoverExpiredReservations(ctx context.Context, limit
 	}
 }
 
+func (s *ShopOrderService) CloseExpiredUnpaidOrders(ctx context.Context, limit int) {
+	orderNos, err := s.orderRepository.ListExpiredUnpaidOrderNos(ctx, time.Now(), limit)
+	if err != nil {
+		log.Printf("list expired unpaid orders failed: %v", err)
+		return
+	}
+	for _, orderNo := range orderNos {
+		s.closeExpiredUnpaidOrder(ctx, orderNo)
+	}
+}
+
 func (s *ShopOrderService) StartRecoveryTasks(ctx context.Context) {
 	go s.runMessageRetryTask(ctx)
 	go s.runReservationRecoveryTask(ctx)
+	go s.runExpiredOrderCloseTask(ctx)
 }
 
 func (s *ShopOrderService) retryStockLockMessage(ctx context.Context, message domain.ShopOrderMessage) {
@@ -338,6 +387,8 @@ func (s *ShopOrderService) recoverExpiredReservation(ctx context.Context, orderN
 		_ = s.stockStore.MarkReservationLocked(ctx, orderNo)
 	case domain.OrderStatusStockFailed:
 		_ = s.stockStore.ReleaseReservation(ctx, orderNo)
+	case domain.OrderStatusCanceled, domain.OrderStatusTimeout:
+		s.releaseClosedOrderReservation(ctx, orderNo, reservation)
 	case domain.OrderStatusStockLocking:
 		s.recoverStockLockingOrder(ctx, orderNo)
 	}
@@ -398,6 +449,66 @@ func (s *ShopOrderService) runReservationRecoveryTask(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+func (s *ShopOrderService) runExpiredOrderCloseTask(ctx context.Context) {
+	ticker := time.NewTicker(orderExpiredCloseInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.CloseExpiredUnpaidOrders(ctx, orderRecoveryBatchSize)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *ShopOrderService) closeExpiredUnpaidOrder(ctx context.Context, orderNo string) {
+	result, err := s.orderRepository.CloseUnpaidOrder(ctx, repository.CloseShopOrderData{
+		OrderNo:      orderNo,
+		TargetStatus: domain.OrderStatusTimeout,
+		Now:          time.Now(),
+	})
+	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, repository.ErrOrderCannotClose) {
+		return
+	}
+	if err != nil {
+		log.Printf("close expired unpaid order failed: orderNo=%s err=%v", orderNo, err)
+		return
+	}
+	s.syncClosedOrderStock(context.Background(), result)
+}
+
+func (s *ShopOrderService) syncClosedOrderStock(ctx context.Context, result repository.CloseShopOrderResult) {
+	if !result.Closed {
+		return
+	}
+	if result.ReleasedLockedStock {
+		if err := s.stockStore.ReleaseLockedReservation(ctx, result.OrderNo, result.SkuID, result.Quantity); err != nil {
+			log.Printf("release locked stock reservation failed: orderNo=%s skuID=%d err=%v", result.OrderNo, result.SkuID, err)
+		}
+		return
+	}
+	if err := s.stockStore.ReleaseReservation(ctx, result.OrderNo); err != nil {
+		log.Printf("release stock reservation failed: orderNo=%s err=%v", result.OrderNo, err)
+	}
+}
+
+func (s *ShopOrderService) releaseClosedOrderReservation(ctx context.Context, orderNo string, reservation *cache.StockReservation) {
+	if reservation == nil {
+		_ = s.stockStore.ReleaseReservation(ctx, orderNo)
+		return
+	}
+	if reservation.Status == cache.StockReservationStatusLocked {
+		if err := s.stockStore.ReleaseLockedReservation(ctx, orderNo, reservation.SkuID, reservation.BuyCount); err != nil {
+			log.Printf("release closed locked reservation failed: orderNo=%s skuID=%d err=%v", orderNo, reservation.SkuID, err)
+		}
+		return
+	}
+	if err := s.stockStore.ReleaseReservation(ctx, orderNo); err != nil {
+		log.Printf("release closed reservation failed: orderNo=%s err=%v", orderNo, err)
 	}
 }
 
@@ -495,6 +606,12 @@ func orderStatusName(status int) string {
 		return "待支付"
 	case domain.OrderStatusStockFailed:
 		return "抢购失败"
+	case domain.OrderStatusPaid:
+		return "已支付"
+	case domain.OrderStatusCanceled:
+		return "已取消"
+	case domain.OrderStatusTimeout:
+		return "已超时"
 	default:
 		return "未知状态"
 	}

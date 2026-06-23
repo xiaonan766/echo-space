@@ -2,6 +2,7 @@ package web
 
 import (
 	"log"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -78,6 +79,23 @@ func (h *AccountHandler) Login(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *AccountHandler) AutoLogin(c *gin.Context) {
+	token := getOptionalWebToken(c)
+	result, err := h.accountService.AutoLogin(c.Request.Context(), token)
+	if err != nil {
+		log.Printf("web auto login: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+	if result == nil {
+		response.Success(c, nil)
+		return
+	}
+
+	c.SetCookie(webservice.WebTokenCookieName, result.Token, 0, "/", "", false, false)
+	response.Success(c, result)
+}
+
 func (h *AccountHandler) Logout(c *gin.Context) {
 	token := c.GetString(middleware.ContextTokenKey)
 	c.SetCookie(webservice.WebTokenCookieName, "", -1, "/", "", false, false)
@@ -89,4 +107,21 @@ func (h *AccountHandler) Logout(c *gin.Context) {
 	}
 
 	response.Success(c, nil)
+}
+
+func getOptionalWebToken(c *gin.Context) string {
+	if token, err := c.Cookie(webservice.WebTokenCookieName); err == nil {
+		if token = normalizeOptionalToken(token); token != "" {
+			return token
+		}
+	}
+	return normalizeOptionalToken(c.GetHeader(webservice.WebTokenCookieName))
+}
+
+func normalizeOptionalToken(token string) string {
+	token = strings.TrimSpace(token)
+	if strings.EqualFold(token, "null") || strings.EqualFold(token, "undefined") {
+		return ""
+	}
+	return token
 }

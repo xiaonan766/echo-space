@@ -33,6 +33,30 @@ func TestPostVideoRouteRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestWebAutoLoginWithoutTokenReturnsSuccess(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/account/autoLogin", nil)
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeSuccess {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeSuccess)
+	}
+	if result.Data != nil {
+		t.Fatalf("response data = %#v, want nil", result.Data)
+	}
+}
+
 func TestAdminAuditVideoRouteRequiresLogin(t *testing.T) {
 	cfg := config.Config{}
 	cfg.Server.Mode = "test"

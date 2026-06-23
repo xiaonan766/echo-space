@@ -6,10 +6,14 @@ const (
 	OrderStatusStockLocking = 0
 	OrderStatusWaitPay      = 1
 	OrderStatusStockFailed  = 2
+	OrderStatusPaid         = 3
+	OrderStatusCanceled     = 4
+	OrderStatusTimeout      = 5
 
 	PayStatusUnpaid = 0
 
-	StockFlowTypeLock = 1
+	StockFlowTypeLock   = 1
+	StockFlowTypeUnlock = 2
 
 	OrderMessageTypeStockLock = 1
 

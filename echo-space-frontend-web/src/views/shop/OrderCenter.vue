@@ -56,6 +56,8 @@
           </div>
           <p v-if="activeOrder.orderStatus === 0">库存正在异步锁定，稍后刷新可查看最终结果。</p>
           <p v-else-if="activeOrder.orderStatus === 1">库存已锁定，可以使用硬币余额完成支付。</p>
+          <p v-else-if="activeOrder.orderStatus === 4">订单已取消，已锁定库存会释放回商品库存。</p>
+          <p v-else-if="activeOrder.orderStatus === 5">订单已超时关闭，已锁定库存会自动释放。</p>
           <p v-else>本次抢购未成功，Redis 预扣库存会自动回补。</p>
         </div>
         <div class="result-actions">
@@ -69,6 +71,15 @@
             @click="handleOpenPayDialog(activeOrder)"
           >
             去支付
+          </el-button>
+          <el-button
+            v-if="canCancel(activeOrder)"
+            class="cancel-action-button"
+            plain
+            :loading="cancelingOrderNo === activeOrder.orderNo"
+            @click="handleCancelOrder(activeOrder)"
+          >
+            取消订单
           </el-button>
         </div>
       </section>
@@ -112,6 +123,15 @@
                     @click.stop="handleOpenPayDialog(order)"
                   >
                     去支付
+                  </el-button>
+                  <el-button
+                    v-if="canCancel(order)"
+                    class="cancel-action-button"
+                    plain
+                    :loading="cancelingOrderNo === order.orderNo"
+                    @click.stop="handleCancelOrder(order)"
+                  >
+                    取消订单
                   </el-button>
                   <span class="order-price">{{ order.totalAmountText }}</span>
                 </div>
@@ -159,6 +179,7 @@ const activeOrder = ref(null)
 const orderList = ref([])
 const payDialogVisible = ref(false)
 const payOrder = ref(null)
+const cancelingOrderNo = ref('')
 const searchForm = reactive({
   keyword: '',
 })
@@ -242,6 +263,10 @@ const canPay = (order) => {
   return order?.orderStatus === 1 && Number(order?.payStatus || 0) === 0
 }
 
+const canCancel = (order) => {
+  return (order?.orderStatus === 0 || order?.orderStatus === 1) && Number(order?.payStatus || 0) === 0
+}
+
 const handleOpenPayDialog = (order) => {
   if (!order) {
     return
@@ -297,6 +322,38 @@ const handlePayConfirm = async () => {
   }
   payDialogVisible.value = false
   proxy.Message.success('支付成功')
+}
+
+const handleCancelOrder = (order) => {
+  if (!order?.orderNo || cancelingOrderNo.value) {
+    return
+  }
+  proxy.Confirm({
+    message: '确定要取消该订单吗？取消后会释放已锁定库存。',
+    okText: '确认取消',
+    okfun: async () => {
+      cancelingOrderNo.value = order.orderNo
+      let result = null
+      try {
+        result = await proxy.Request({
+          url: proxy.Api.cancelShopOrder,
+          params: {
+            orderNo: order.orderNo,
+          },
+          showLoading: true,
+        })
+      } finally {
+        cancelingOrderNo.value = ''
+      }
+      if (!result) {
+        return
+      }
+      if (result.data) {
+        syncOrderToPage(result.data)
+      }
+      proxy.Message.success('订单已取消')
+    },
+  })
 }
 
 const syncOrderToPage = (order) => {
@@ -385,6 +442,12 @@ const orderStatusClass = (order) => {
   }
   if (order.orderStatus === 3) {
     return 'paid'
+  }
+  if (order.orderStatus === 4) {
+    return 'canceled'
+  }
+  if (order.orderStatus === 5) {
+    return 'timeout'
   }
   return ''
 }
@@ -622,6 +685,17 @@ watch(
   }
 }
 
+.cancel-action-button {
+  color: #61666d;
+  border-color: #c8c9cc;
+  &:hover,
+  &:focus {
+    color: #f56c6c;
+    border-color: #f56c6c;
+    background: #fff;
+  }
+}
+
 .order-list-panel {
   padding: 26px 32px 30px;
 }
@@ -711,6 +785,11 @@ watch(
   &.paid {
     color: #67c23a;
     border-color: #67c23a;
+  }
+  &.canceled,
+  &.timeout {
+    color: #909399;
+    border-color: #c8c9cc;
   }
 }
 

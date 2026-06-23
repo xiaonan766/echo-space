@@ -35,6 +35,7 @@ type FileHandler struct {
 	resourceRoot        string
 	maxImageSize        int64
 	videoPostRepository *repository.VideoPostRepository
+	videoRepository     *repository.VideoRepository
 }
 
 func NewFileHandler(fileConfig config.FileConfig, videoPostRepository ...*repository.VideoPostRepository) *FileHandler {
@@ -58,6 +59,12 @@ func NewFileHandler(fileConfig config.FileConfig, videoPostRepository ...*reposi
 		maxImageSize:        int64(maxImageMB) * 1024 * 1024,
 		videoPostRepository: videoRepo,
 	}
+}
+
+func NewPublicFileHandler(fileConfig config.FileConfig, videoRepository *repository.VideoRepository) *FileHandler {
+	handler := NewFileHandler(fileConfig)
+	handler.videoRepository = videoRepository
+	return handler
 }
 
 func (h *FileHandler) UploadImage(c *gin.Context) {
@@ -116,6 +123,15 @@ func (h *FileHandler) GetVideoResource(c *gin.Context) {
 func (h *FileHandler) GetVideoResourceSegment(c *gin.Context) {
 	resourceName := strings.TrimSpace(c.Param("resourceName"))
 	h.serveVideoResource(c, resourceName)
+}
+
+func (h *FileHandler) GetPublishedVideoResource(c *gin.Context) {
+	h.servePublishedVideoResource(c, "index.m3u8")
+}
+
+func (h *FileHandler) GetPublishedVideoResourceSegment(c *gin.Context) {
+	resourceName := strings.TrimSpace(c.Param("resourceName"))
+	h.servePublishedVideoResource(c, resourceName)
 }
 
 func (h *FileHandler) saveImage(fileHeader *multipart.FileHeader) (string, error) {
@@ -192,7 +208,47 @@ func (h *FileHandler) serveVideoResource(c *gin.Context, resourceName string) {
 		return
 	}
 
-	targetPath, ok := h.safeResourcePath(path.Join(videoFile.FilePath, resourceName))
+	h.serveVideoResourceFile(c, videoFile.FilePath, resourceName)
+}
+
+func (h *FileHandler) servePublishedVideoResource(c *gin.Context, resourceName string) {
+	if h.videoRepository == nil {
+		response.NotFound(c)
+		return
+	}
+
+	fileID := strings.TrimSpace(c.Param("fileId"))
+	if !validVideoFileID(fileID) {
+		response.NotFound(c)
+		return
+	}
+
+	resourceName, ok := normalizeVideoResourceName(resourceName)
+	if !ok {
+		response.NotFound(c)
+		return
+	}
+
+	videoFile, err := h.videoRepository.FindVideoFileByFileID(c.Request.Context(), fileID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		response.NotFound(c)
+		return
+	}
+	if err != nil {
+		log.Printf("load published video resource file info: fileID=%s err=%v", fileID, err)
+		response.ServerError(c, nil)
+		return
+	}
+	if strings.TrimSpace(videoFile.FilePath) == "" {
+		response.NotFound(c)
+		return
+	}
+
+	h.serveVideoResourceFile(c, videoFile.FilePath, resourceName)
+}
+
+func (h *FileHandler) serveVideoResourceFile(c *gin.Context, filePath string, resourceName string) {
+	targetPath, ok := h.safeResourcePath(path.Join(filePath, resourceName))
 	if !ok {
 		response.NotFound(c)
 		return

@@ -13,6 +13,10 @@ import (
 
 var ErrOrderStockInsufficient = errors.New("order stock insufficient")
 
+var ErrOrderStockLockSkipped = errors.New("order stock lock skipped")
+
+var ErrOrderCannotClose = errors.New("order cannot close")
+
 type ShopOrderRepository struct {
 	db *gorm.DB
 }
@@ -30,6 +34,22 @@ type CreateShopOrderData struct {
 	TotalAmount    float64
 	ExpireMinutes  int
 	MessagePayload string
+}
+
+type CloseShopOrderData struct {
+	OrderNo      string
+	UserID       string
+	TargetStatus int
+	Now          time.Time
+}
+
+type CloseShopOrderResult struct {
+	OrderNo             string
+	ProductID           uint64
+	SkuID               uint64
+	Quantity            int
+	Closed              bool
+	ReleasedLockedStock bool
 }
 
 func NewShopOrderRepository(db *gorm.DB) *ShopOrderRepository {
@@ -186,8 +206,11 @@ func (r *ShopOrderRepository) LockOrderStock(ctx context.Context, orderNo string
 			Take(&order).Error; err != nil {
 			return err
 		}
-		if order.OrderStatus == domain.OrderStatusWaitPay || order.OrderStatus == domain.OrderStatusStockFailed {
+		if order.OrderStatus == domain.OrderStatusWaitPay {
 			return nil
+		}
+		if order.OrderStatus != domain.OrderStatusStockLocking {
+			return ErrOrderStockLockSkipped
 		}
 
 		var flowCount int64
@@ -253,6 +276,106 @@ func (r *ShopOrderRepository) LockOrderStock(ctx context.Context, orderNo string
 		return ErrOrderStockInsufficient
 	}
 	return nil
+}
+
+func (r *ShopOrderRepository) CloseUnpaidOrder(ctx context.Context, data CloseShopOrderData) (CloseShopOrderResult, error) {
+	result := CloseShopOrderResult{OrderNo: data.OrderNo}
+	if data.Now.IsZero() {
+		data.Now = time.Now()
+	}
+	if data.TargetStatus != domain.OrderStatusCanceled && data.TargetStatus != domain.OrderStatusTimeout {
+		return result, ErrOrderCannotClose
+	}
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var order domain.ShopOrder
+		query := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("order_no = ?", data.OrderNo)
+		if data.UserID != "" {
+			query = query.Where("user_id = ?", data.UserID)
+		}
+		if err := query.Take(&order).Error; err != nil {
+			return err
+		}
+
+		result.OrderNo = order.OrderNo
+		switch order.OrderStatus {
+		case domain.OrderStatusCanceled, domain.OrderStatusTimeout:
+			return nil
+		case domain.OrderStatusStockLocking, domain.OrderStatusWaitPay:
+		default:
+			return ErrOrderCannotClose
+		}
+		if order.PayStatus != domain.PayStatusUnpaid {
+			return ErrOrderCannotClose
+		}
+		if data.TargetStatus == domain.OrderStatusTimeout && order.ExpireTime.After(data.Now) {
+			return ErrOrderCannotClose
+		}
+
+		var item domain.ShopOrderItem
+		if err := tx.Where("order_no = ?", order.OrderNo).Take(&item).Error; err != nil {
+			return err
+		}
+		result.ProductID = item.ProductID
+		result.SkuID = item.SkuID
+		result.Quantity = item.Quantity
+
+		var lockFlowCount int64
+		if err := tx.Model(&domain.ShopStockFlow{}).
+			Where("sku_id = ? AND order_no = ? AND change_type = ?", item.SkuID, order.OrderNo, domain.StockFlowTypeLock).
+			Count(&lockFlowCount).Error; err != nil {
+			return err
+		}
+		var unlockFlowCount int64
+		if err := tx.Model(&domain.ShopStockFlow{}).
+			Where("sku_id = ? AND order_no = ? AND change_type = ?", item.SkuID, order.OrderNo, domain.StockFlowTypeUnlock).
+			Count(&unlockFlowCount).Error; err != nil {
+			return err
+		}
+
+		if lockFlowCount > 0 && unlockFlowCount == 0 {
+			if err := closeOrderLockedStock(tx, order.OrderNo, item); err != nil {
+				return err
+			}
+			result.ReleasedLockedStock = item.Quantity > 0
+		}
+
+		updateResult := tx.Model(&domain.ShopOrder{}).
+			Where("order_no = ? AND order_status IN ?", order.OrderNo, []int{
+				domain.OrderStatusStockLocking,
+				domain.OrderStatusWaitPay,
+			}).
+			Updates(map[string]any{
+				"order_status": data.TargetStatus,
+				"cancel_time":  data.Now,
+			})
+		if updateResult.Error != nil {
+			return updateResult.Error
+		}
+		result.Closed = updateResult.RowsAffected > 0
+		return nil
+	})
+	return result, err
+}
+
+func (r *ShopOrderRepository) ListExpiredUnpaidOrderNos(ctx context.Context, now time.Time, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var orderNos []string
+	err := r.db.WithContext(ctx).
+		Model(&domain.ShopOrder{}).
+		Where("pay_status = ?", domain.PayStatusUnpaid).
+		Where("order_status IN ?", []int{
+			domain.OrderStatusStockLocking,
+			domain.OrderStatusWaitPay,
+		}).
+		Where("expire_time <= ?", now).
+		Order("order_id asc").
+		Limit(limit).
+		Pluck("order_no", &orderNos).Error
+	return orderNos, err
 }
 
 func (r *ShopOrderRepository) MarkOrderStockFailed(ctx context.Context, orderNo string) error {
@@ -327,6 +450,45 @@ func markOrderStockFailed(tx *gorm.DB, orderNo string) error {
 	return tx.Model(&domain.ShopOrder{}).
 		Where("order_no = ? AND order_status = ?", orderNo, domain.OrderStatusStockLocking).
 		Update("order_status", domain.OrderStatusStockFailed).Error
+}
+
+func closeOrderLockedStock(tx *gorm.DB, orderNo string, item domain.ShopOrderItem) error {
+	var sku domain.ShopSKU
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("sku_id = ?", item.SkuID).
+		Take(&sku).Error; err != nil {
+		return err
+	}
+
+	afterLocked := sku.LockedStock - item.Quantity
+	if afterLocked < 0 {
+		afterLocked = 0
+	}
+
+	updateResult := tx.Model(&domain.ShopSKU{}).
+		Where("sku_id = ?", item.SkuID).
+		Updates(map[string]any{
+			"locked_stock": gorm.Expr("GREATEST(locked_stock - ?, 0)", item.Quantity),
+			"version":      gorm.Expr("version + ?", 1),
+		})
+	if updateResult.Error != nil {
+		return updateResult.Error
+	}
+	if updateResult.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+
+	flow := &domain.ShopStockFlow{
+		SkuID:             item.SkuID,
+		OrderNo:           orderNo,
+		ChangeType:        domain.StockFlowTypeUnlock,
+		ChangeCount:       item.Quantity,
+		BeforeLockedStock: sku.LockedStock,
+		AfterLockedStock:  afterLocked,
+		BeforeSoldStock:   sku.SoldStock,
+		AfterSoldStock:    sku.SoldStock,
+	}
+	return tx.Create(flow).Error
 }
 
 func nowAddMinutes(minutes int) time.Time {

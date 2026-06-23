@@ -20,14 +20,14 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	videoUploadService := webservice.NewVideoUploadService(uploadingFileStore, sysSettingStore, deps.Config.File.ResourceRoot)
 	videoUploadHandler := webhandler.NewVideoUploadHandler(videoUploadService)
 	videoPostRepository := repository.NewVideoPostRepository(deps.DB)
-	webFileHandler := filehandler.NewFileHandler(deps.Config.File)
+	videoRepository := repository.NewVideoRepository(deps.DB)
+	webFileHandler := filehandler.NewPublicFileHandler(deps.Config.File, videoRepository)
 
 	categoryRepository := repository.NewCategoryRepository(deps.DB)
 	categoryService := webservice.NewCategoryService(categoryRepository)
 	categoryHandler := webhandler.NewCategoryHandler(categoryService)
 	videoPostService := webservice.NewVideoPostService(videoPostRepository, categoryRepository, uploadingFileStore, sysSettingStore, deps.VideoTranscodePublisher, deps.Config.File.ResourceRoot)
 	videoPostHandler := webhandler.NewVideoPostHandler(videoPostService)
-	videoRepository := repository.NewVideoRepository(deps.DB)
 	videoService := webservice.NewVideoService(videoRepository)
 	videoHandler := webhandler.NewVideoHandler(videoService)
 	sysSettingService := webservice.NewSysSettingService(sysSettingStore)
@@ -47,6 +47,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	accountGroup.POST("/checkCode", accountHandler.CheckCode)
 	accountGroup.POST("/register", accountHandler.Register)
 	accountGroup.POST("/login", accountHandler.Login)
+	accountGroup.GET("/autoLogin", accountHandler.AutoLogin)
+	accountGroup.POST("/autoLogin", accountHandler.AutoLogin)
 	accountGroup.POST("/logout", middleware.WebAuth(accountService), accountHandler.Logout)
 
 	ucenterGroup := group.Group("/ucenter", middleware.WebAuth(accountService))
@@ -56,6 +58,9 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	fileGroup.POST("/preUploadVideo", middleware.WebAuth(accountService), videoUploadHandler.PreUploadVideo)
 	fileGroup.POST("/uploadVideo", middleware.WebAuth(accountService), videoUploadHandler.UploadVideo)
 	fileGroup.POST("/uploadImage", middleware.WebAuth(accountService), webFileHandler.UploadImage)
+	fileGroup.GET("/videoResource/:fileId", webFileHandler.GetPublishedVideoResource)
+	fileGroup.GET("/videoResource/:fileId/", webFileHandler.GetPublishedVideoResource)
+	fileGroup.GET("/videoResource/:fileId/:resourceName", webFileHandler.GetPublishedVideoResourceSegment)
 
 	categoryGroup := group.Group("/category")
 	categoryGroup.GET("/loadAllCategory", categoryHandler.LoadAllCategory)
@@ -87,4 +92,5 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	shopOrderGroup.POST("/detail", shopOrderHandler.GetOrderDetail)
 	shopOrderGroup.GET("/loadOrder", shopOrderHandler.LoadOrder)
 	shopOrderGroup.POST("/loadOrder", shopOrderHandler.LoadOrder)
+	shopOrderGroup.POST("/cancel", shopOrderHandler.CancelOrder)
 }

@@ -73,6 +73,7 @@ type TokenUserInfo struct {
 	Sex              int    `json:"sex"`
 	Theme            int    `json:"theme"`
 	CurrentCoinCount int    `json:"currentCoinCount"`
+	ExpireAt         int64  `json:"expireAt"`
 }
 
 func NewAccountService(hybridCache *cache.HybridCache, userRepository *repository.UserRepository) *AccountService {
@@ -205,6 +206,7 @@ func (s *AccountService) Login(ctx context.Context, input LoginInput) (*TokenUse
 		Sex:              user.Sex,
 		Theme:            user.Theme,
 		CurrentCoinCount: user.CurrentCoinCount,
+		ExpireAt:         now.Add(webTokenTTL).UnixMilli(),
 	}
 	if err := s.tokenStore.Set(ctx, token, result, webTokenTTL); err != nil {
 		return nil, err
@@ -220,6 +222,28 @@ func (s *AccountService) Logout(ctx context.Context, token string) error {
 	}
 
 	return s.tokenStore.Delete(ctx, token)
+}
+
+func (s *AccountService) AutoLogin(ctx context.Context, token string) (*TokenUserInfo, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, nil
+	}
+
+	info, ok, err := s.GetTokenUserInfo(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+
+	info.Token = token
+	info.ExpireAt = time.Now().Add(webTokenTTL).UnixMilli()
+	if err := s.tokenStore.Set(ctx, token, info, webTokenTTL); err != nil {
+		return nil, err
+	}
+	return info, nil
 }
 
 func (s *AccountService) GetTokenUserInfo(ctx context.Context, token string) (*TokenUserInfo, bool, error) {

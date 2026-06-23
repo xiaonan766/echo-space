@@ -70,6 +70,28 @@ func (r *VideoRepository) ListVideoFiles(ctx context.Context, videoID string) ([
 	return files, err
 }
 
+func (r *VideoRepository) FindVideoFileByFileID(ctx context.Context, fileID string) (*domain.VideoInfoFile, error) {
+	var file domain.VideoInfoFile
+	err := r.db.WithContext(ctx).
+		Table("video_info_file").
+		Select(`
+			file_id,
+			user_id,
+			video_id,
+			COALESCE(file_name, '') AS file_name,
+			file_index,
+			file_size,
+			COALESCE(file_path, '') AS file_path,
+			COALESCE(duration, 0) AS duration
+		`).
+		Where("file_id = ?", fileID).
+		Take(&file).Error
+	if err != nil {
+		return nil, err
+	}
+	return &file, nil
+}
+
 func (r *VideoRepository) ListWebVideoByPage(ctx context.Context, query WebVideoListQuery) ([]domain.WebVideoItem, int64, error) {
 	baseQuery := r.applyWebVideoListFilter(r.db.WithContext(ctx).Table("video_info vi"), query)
 
