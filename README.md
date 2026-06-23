@@ -17,8 +17,14 @@
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/4fea49f5-427f-4851-88d4-23f67ae82260" />
 稿件管理页面
 <img width="1917" height="987" alt="image" src="https://github.com/user-attachments/assets/b7e196ad-fe13-42ba-a343-071175275e85" />
+————  ————   ———  ——— ———  ——————  —————  ————  ————   ———  ——— ———  ——————  —————  ————  ————   ———  ——— ———  ——————  —————
 管理端：
 登录页面
 <img width="1919" height="981" alt="image" src="https://github.com/user-attachments/assets/0f52b1b6-b4b9-48eb-bded-7193a6b64002" />
 用户管理页面
 <img width="1917" height="974" alt="image" src="https://github.com/user-attachments/assets/1839609b-7865-462f-8a1d-ba1d469fc99c" />
+周边管理页面
+<img width="1919" height="976" alt="image" src="https://github.com/user-attachments/assets/aff093fe-2ccc-4614-959e-4fa231e9ea4f" />
+<img width="1919" height="977" alt="image" src="https://github.com/user-attachments/assets/3f30dc6e-8653-4103-9d40-361739304721" />
+新增周边页面
+<img width="1909" height="977" alt="image" src="https://github.com/user-attachments/assets/d6ed6a3b-07a4-49cf-9ecb-b29dfacb4174" />
