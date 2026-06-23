@@ -24,6 +24,52 @@ func NewVideoRepository(db *gorm.DB) *VideoRepository {
 	return &VideoRepository{db: db}
 }
 
+const webVideoSelectColumns = `
+	vi.video_id,
+	COALESCE(vi.video_cover, '') AS video_cover,
+	COALESCE(vi.video_name, '') AS video_name,
+	vi.user_id,
+	COALESCE(ui.nick_name, '') AS nick_name,
+	COALESCE(ui.avatar, '') AS avatar,
+	DATE_FORMAT(vi.create_time, '%Y-%m-%d %H:%i:%s') AS create_time,
+	DATE_FORMAT(vi.last_update_time, '%Y-%m-%d %H:%i:%s') AS last_update_time,
+	vi.p_category_id,
+	vi.category_id,
+	vi.post_type,
+	COALESCE(vi.origin_info, '') AS origin_info,
+	COALESCE(vi.tags, '') AS tags,
+	COALESCE(vi.introduction, '') AS introduction,
+	COALESCE(vi.interaction, '') AS interaction,
+	COALESCE(vi.duration, 0) AS duration,
+	COALESCE(vi.play_count, 0) AS play_count,
+	COALESCE(vi.like_count, 0) AS like_count,
+	COALESCE(vi.danmu_count, 0) AS danmu_count,
+	COALESCE(vi.comment_count, 0) AS comment_count,
+	COALESCE(vi.coin_count, 0) AS coin_count,
+	COALESCE(vi.collect_count, 0) AS collect_count,
+	COALESCE(vi.recommend_type, 0) AS recommend_type
+`
+
+func (r *VideoRepository) ListVideoFiles(ctx context.Context, videoID string) ([]domain.VideoInfoFile, error) {
+	var files []domain.VideoInfoFile
+	err := r.db.WithContext(ctx).
+		Table("video_info_file").
+		Select(`
+			file_id,
+			user_id,
+			video_id,
+			COALESCE(file_name, '') AS file_name,
+			file_index,
+			file_size,
+			COALESCE(file_path, '') AS file_path,
+			COALESCE(duration, 0) AS duration
+		`).
+		Where("video_id = ?", videoID).
+		Order("file_index asc").
+		Scan(&files).Error
+	return files, err
+}
+
 func (r *VideoRepository) ListWebVideoByPage(ctx context.Context, query WebVideoListQuery) ([]domain.WebVideoItem, int64, error) {
 	baseQuery := r.applyWebVideoListFilter(r.db.WithContext(ctx).Table("video_info vi"), query)
 
@@ -35,31 +81,7 @@ func (r *VideoRepository) ListWebVideoByPage(ctx context.Context, query WebVideo
 	var list []domain.WebVideoItem
 	offset := (query.PageNo - 1) * query.PageSize
 	err := r.applyWebVideoListFilter(r.db.WithContext(ctx).Table("video_info vi"), query).
-		Select(`
-			vi.video_id,
-			COALESCE(vi.video_cover, '') AS video_cover,
-			COALESCE(vi.video_name, '') AS video_name,
-			vi.user_id,
-			COALESCE(ui.nick_name, '') AS nick_name,
-			COALESCE(ui.avatar, '') AS avatar,
-			DATE_FORMAT(vi.create_time, '%Y-%m-%d %H:%i:%s') AS create_time,
-			DATE_FORMAT(vi.last_update_time, '%Y-%m-%d %H:%i:%s') AS last_update_time,
-			vi.p_category_id,
-			vi.category_id,
-			vi.post_type,
-			COALESCE(vi.origin_info, '') AS origin_info,
-			COALESCE(vi.tags, '') AS tags,
-			COALESCE(vi.introduction, '') AS introduction,
-			COALESCE(vi.interaction, '') AS interaction,
-			COALESCE(vi.duration, 0) AS duration,
-			COALESCE(vi.play_count, 0) AS play_count,
-			COALESCE(vi.like_count, 0) AS like_count,
-			COALESCE(vi.danmu_count, 0) AS danmu_count,
-			COALESCE(vi.comment_count, 0) AS comment_count,
-			COALESCE(vi.coin_count, 0) AS coin_count,
-			COALESCE(vi.collect_count, 0) AS collect_count,
-			COALESCE(vi.recommend_type, 0) AS recommend_type
-		`).
+		Select(webVideoSelectColumns).
 		Joins("LEFT JOIN user_info ui ON vi.user_id = ui.user_id").
 		Order("vi.create_time desc").
 		Offset(offset).
@@ -69,6 +91,19 @@ func (r *VideoRepository) ListWebVideoByPage(ctx context.Context, query WebVideo
 		return nil, 0, err
 	}
 	return list, totalCount, nil
+}
+
+func (r *VideoRepository) ListWebVideo(ctx context.Context, query WebVideoListQuery) ([]domain.WebVideoItem, error) {
+	var list []domain.WebVideoItem
+	err := r.applyWebVideoListFilter(r.db.WithContext(ctx).Table("video_info vi"), query).
+		Select(webVideoSelectColumns).
+		Joins("LEFT JOIN user_info ui ON vi.user_id = ui.user_id").
+		Order("vi.create_time desc").
+		Scan(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 func (r *VideoRepository) applyWebVideoListFilter(db *gorm.DB, query WebVideoListQuery) *gorm.DB {

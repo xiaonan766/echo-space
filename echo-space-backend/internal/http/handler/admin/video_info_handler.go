@@ -92,6 +92,21 @@ func (h *VideoInfoHandler) AuditVideo(c *gin.Context) {
 	response.Success(c, nil)
 }
 
+func (h *VideoInfoHandler) RecommendVideo(c *gin.Context) {
+	err := h.videoInfoService.RecommendVideo(c.Request.Context(), formOrQuery(c, "videoId"))
+	if err != nil {
+		if businessError, ok := adminservice.IsBusinessError(err); ok {
+			response.BusinessError(c, businessError.Info, nil)
+			return
+		}
+		log.Printf("admin recommend video: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+
+	response.Success(c, nil)
+}
+
 func formOrQuery(c *gin.Context, key string) string {
 	if value := c.PostForm(key); strings.TrimSpace(value) != "" {
 		return value

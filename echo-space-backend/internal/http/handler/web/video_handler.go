@@ -32,3 +32,29 @@ func (h *VideoHandler) LoadVideo(c *gin.Context) {
 
 	response.Success(c, result)
 }
+
+func (h *VideoHandler) LoadRecommendVideo(c *gin.Context) {
+	result, err := h.videoService.LoadRecommendVideo(c.Request.Context())
+	if err != nil {
+		log.Printf("web load recommend video: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+
+	response.Success(c, result)
+}
+
+func (h *VideoHandler) LoadVideoPList(c *gin.Context) {
+	result, err := h.videoService.LoadVideoPList(c.Request.Context(), formOrQuery(c, "videoId"))
+	if err != nil {
+		if businessError, ok := webservice.IsBusinessError(err); ok {
+			response.BusinessError(c, businessError.Info, nil)
+			return
+		}
+		log.Printf("web load video p list: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+
+	response.Success(c, result)
+}

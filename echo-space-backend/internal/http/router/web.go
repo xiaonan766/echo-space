@@ -30,6 +30,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	videoRepository := repository.NewVideoRepository(deps.DB)
 	videoService := webservice.NewVideoService(videoRepository)
 	videoHandler := webhandler.NewVideoHandler(videoService)
+	sysSettingService := webservice.NewSysSettingService(sysSettingStore)
+	sysSettingHandler := webhandler.NewSysSettingHandler(sysSettingService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
 	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
@@ -60,8 +62,16 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, deps 
 	categoryGroup.POST("/loadAllCategory", categoryHandler.LoadAllCategory)
 
 	videoGroup := group.Group("/video")
+	videoGroup.GET("/loadRecommendVideo", videoHandler.LoadRecommendVideo)
+	videoGroup.POST("/loadRecommendVideo", videoHandler.LoadRecommendVideo)
 	videoGroup.GET("/loadVideo", videoHandler.LoadVideo)
 	videoGroup.POST("/loadVideo", videoHandler.LoadVideo)
+	videoGroup.GET("/loadVideoPList", videoHandler.LoadVideoPList)
+	videoGroup.POST("/loadVideoPList", videoHandler.LoadVideoPList)
+
+	sysSettingGroup := group.Group("/sysSetting")
+	sysSettingGroup.GET("/getSetting", sysSettingHandler.GetSetting)
+	sysSettingGroup.POST("/getSetting", sysSettingHandler.GetSetting)
 
 	shopGroup := group.Group("/shop")
 	shopGroup.GET("/loadRecommend", shopHandler.LoadRecommend)

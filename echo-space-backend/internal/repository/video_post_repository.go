@@ -16,6 +16,7 @@ var ErrVideoPostNotEditable = errors.New("video post is not editable")
 var ErrVideoTranscodeClaimLost = errors.New("video transcode claim was lost")
 var ErrVideoAuditConflict = errors.New("video audit conflict")
 var ErrVideoNoPublishableFiles = errors.New("video has no publishable files")
+var ErrVideoInfoNotFound = errors.New("video info not found")
 
 type VideoPostRepository struct {
 	db *gorm.DB
@@ -378,6 +379,30 @@ func (r *VideoPostRepository) AuditVideo(ctx context.Context, data AuditVideoDat
 			files = append(files, buildVideoInfoFileFromPost(postFile))
 		}
 		return tx.Create(&files).Error
+	})
+}
+
+func (r *VideoPostRepository) ToggleRecommendVideo(ctx context.Context, videoID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var video domain.VideoInfo
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("video_id", "recommend_type").
+			Where("video_id = ?", videoID).
+			Take(&video).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrVideoInfoNotFound
+		}
+		if err != nil {
+			return err
+		}
+
+		recommendType := 1
+		if video.RecommendType == 1 {
+			recommendType = 0
+		}
+		return tx.Model(&domain.VideoInfo{}).
+			Where("video_id = ?", videoID).
+			Update("recommend_type", recommendType).Error
 	})
 }
 

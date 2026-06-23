@@ -117,6 +117,19 @@ func (s *VideoInfoService) AuditVideo(ctx context.Context, input AuditVideoInput
 	return err
 }
 
+func (s *VideoInfoService) RecommendVideo(ctx context.Context, videoID string) error {
+	videoID = strings.TrimSpace(videoID)
+	if len(videoID) != 10 || !isAlphaNumeric(videoID) {
+		return &BusinessError{Info: "参数错误"}
+	}
+
+	err := s.videoPostRepository.ToggleRecommendVideo(ctx, videoID)
+	if errors.Is(err, repository.ErrVideoInfoNotFound) {
+		return &BusinessError{Info: "视频不存在"}
+	}
+	return err
+}
+
 func normalizeVideoInfoListInput(input VideoInfoListInput) VideoInfoListInput {
 	if input.PageNo <= 0 {
 		input.PageNo = defaultPageNo

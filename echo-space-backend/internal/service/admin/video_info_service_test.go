@@ -66,3 +66,14 @@ func TestLoadVideoPListValidatesVideoID(t *testing.T) {
 		t.Fatalf("error = %T %v, want BusinessError", err, err)
 	}
 }
+
+func TestRecommendVideoValidatesVideoID(t *testing.T) {
+	service := NewVideoInfoService(nil)
+	err := service.RecommendVideo(context.Background(), "bad-id")
+	if err == nil {
+		t.Fatal("expected business error")
+	}
+	if _, ok := IsBusinessError(err); !ok {
+		t.Fatalf("error = %T %v, want BusinessError", err, err)
+	}
+}

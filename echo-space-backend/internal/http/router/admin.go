@@ -86,6 +86,7 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	videoInfoGroup.GET("/loadVideoPList", videoInfoHandler.LoadVideoPList)
 	videoInfoGroup.POST("/loadVideoPList", videoInfoHandler.LoadVideoPList)
 	videoInfoGroup.POST("/auditVideo", videoInfoHandler.AuditVideo)
+	videoInfoGroup.POST("/recommendVideo", videoInfoHandler.RecommendVideo)
 
 	interactGroup := authGroup.Group("/interact")
 	interactGroup.GET("/loadComment", interactHandler.LoadComment)

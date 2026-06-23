@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
@@ -13,6 +14,7 @@ const (
 	defaultVideoPageSize = 15
 	maxVideoPageSize     = 50
 	videoNoRecommend     = 0
+	videoRecommend       = 1
 )
 
 type VideoService struct {
@@ -43,10 +45,38 @@ func (s *VideoService) LoadVideo(ctx context.Context, input VideoListInput) (dom
 		return domain.PaginationResult[domain.WebVideoItem]{}, err
 	}
 
-	for index := range list {
-		list[index].PlayTime = formatVideoDuration(list[index].Duration)
-	}
+	fillWebVideoPlayTime(list)
 	return domain.NewPaginationResult(list, totalCount, input.PageNo, input.PageSize), nil
+}
+
+func (s *VideoService) LoadRecommendVideo(ctx context.Context) ([]domain.WebVideoItem, error) {
+	list, err := s.videoRepository.ListWebVideo(ctx, repository.WebVideoListQuery{
+		RecommendType: videoRecommend,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = []domain.WebVideoItem{}
+	}
+	fillWebVideoPlayTime(list)
+	return list, nil
+}
+
+func (s *VideoService) LoadVideoPList(ctx context.Context, videoID string) ([]domain.VideoInfoFile, error) {
+	videoID = strings.TrimSpace(videoID)
+	if len(videoID) != 10 || !isValidPublicVideoID(videoID) {
+		return nil, &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
+	}
+
+	files, err := s.videoRepository.ListVideoFiles(ctx, videoID)
+	if err != nil {
+		return nil, err
+	}
+	if files == nil {
+		files = []domain.VideoInfoFile{}
+	}
+	return files, nil
 }
 
 func normalizeVideoListInput(input VideoListInput) VideoListInput {
@@ -68,6 +98,12 @@ func normalizeVideoListInput(input VideoListInput) VideoListInput {
 	return input
 }
 
+func fillWebVideoPlayTime(list []domain.WebVideoItem) {
+	for index := range list {
+		list[index].PlayTime = formatVideoDuration(list[index].Duration)
+	}
+}
+
 func formatVideoDuration(seconds int) string {
 	if seconds < 0 {
 		seconds = 0
@@ -80,4 +116,20 @@ func formatVideoDuration(seconds int) string {
 		return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, remainingSeconds)
 	}
 	return fmt.Sprintf("%02d:%02d", minutes, remainingSeconds)
+}
+
+func isValidPublicVideoID(videoID string) bool {
+	for _, char := range videoID {
+		if char >= '0' && char <= '9' {
+			continue
+		}
+		if char >= 'a' && char <= 'z' {
+			continue
+		}
+		if char >= 'A' && char <= 'Z' {
+			continue
+		}
+		return false
+	}
+	return true
 }
