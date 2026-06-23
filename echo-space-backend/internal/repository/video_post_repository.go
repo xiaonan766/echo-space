@@ -86,6 +86,54 @@ func (r *VideoPostRepository) FindPostWithFiles(ctx context.Context, videoID str
 	return &post, files, nil
 }
 
+func (r *VideoPostRepository) ListPostFiles(ctx context.Context, videoID string) ([]domain.VideoInfoFilePostItem, error) {
+	var files []domain.VideoInfoFilePostItem
+	err := r.db.WithContext(ctx).
+		Table("video_info_file_post").
+		Select(`
+			file_id,
+			upload_id,
+			user_id,
+			video_id,
+			file_index,
+			COALESCE(file_name, '') AS file_name,
+			COALESCE(file_size, 0) AS file_size,
+			COALESCE(file_path, '') AS file_path,
+			COALESCE(update_type, 0) AS update_type,
+			COALESCE(transfer_result, 0) AS transfer_result,
+			COALESCE(duration, 0) AS duration
+		`).
+		Where("video_id = ?", videoID).
+		Order("file_index asc").
+		Scan(&files).Error
+	return files, err
+}
+
+func (r *VideoPostRepository) FindPostFileByFileID(ctx context.Context, fileID string) (*domain.VideoInfoFilePostItem, error) {
+	var file domain.VideoInfoFilePostItem
+	err := r.db.WithContext(ctx).
+		Table("video_info_file_post").
+		Select(`
+			file_id,
+			upload_id,
+			user_id,
+			video_id,
+			file_index,
+			COALESCE(file_name, '') AS file_name,
+			COALESCE(file_size, 0) AS file_size,
+			COALESCE(file_path, '') AS file_path,
+			COALESCE(update_type, 0) AS update_type,
+			COALESCE(transfer_result, 0) AS transfer_result,
+			COALESCE(duration, 0) AS duration
+		`).
+		Where("file_id = ?", fileID).
+		Take(&file).Error
+	if err != nil {
+		return nil, err
+	}
+	return &file, nil
+}
+
 func (r *VideoPostRepository) ListUserPostsByPage(ctx context.Context, query UcenterVideoPostListQuery) ([]domain.UcenterVideoPostItem, int64, error) {
 	countQuery := applyUcenterVideoPostFilter(r.db.WithContext(ctx).Table("video_info_post v"), query)
 	var totalCount int64

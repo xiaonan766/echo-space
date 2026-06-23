@@ -36,7 +36,7 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	videoSettingStore := cache.NewSysSettingStore(deps.Cache, "echo-space:sys_setting")
 	videoInfoService := adminservice.NewVideoInfoService(videoPostRepository, videoSettingStore)
 	videoInfoHandler := adminhandler.NewVideoInfoHandler(videoInfoService)
-	fileHandler := filehandler.NewFileHandler(deps.Config.File)
+	fileHandler := filehandler.NewFileHandler(deps.Config.File, videoPostRepository)
 
 	group.GET("/health", healthHandler.Health)
 
@@ -53,6 +53,9 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 
 	fileGroup := authGroup.Group("/file")
 	fileGroup.POST("/uploadImage", fileHandler.UploadImage)
+	fileGroup.GET("/videoResource/:fileId", fileHandler.GetVideoResource)
+	fileGroup.GET("/videoResource/:fileId/", fileHandler.GetVideoResource)
+	fileGroup.GET("/videoResource/:fileId/:resourceName", fileHandler.GetVideoResourceSegment)
 
 	indexGroup := authGroup.Group("/index")
 	indexGroup.GET("/getActualTimeStatisticsInfo", indexHandler.GetActualTimeStatisticsInfo)
@@ -80,6 +83,8 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	videoInfoGroup := authGroup.Group("/videoInfo")
 	videoInfoGroup.GET("/loadVideoList", videoInfoHandler.LoadVideoList)
 	videoInfoGroup.POST("/loadVideoList", videoInfoHandler.LoadVideoList)
+	videoInfoGroup.GET("/loadVideoPList", videoInfoHandler.LoadVideoPList)
+	videoInfoGroup.POST("/loadVideoPList", videoInfoHandler.LoadVideoPList)
 	videoInfoGroup.POST("/auditVideo", videoInfoHandler.AuditVideo)
 
 	interactGroup := authGroup.Group("/interact")

@@ -52,6 +52,21 @@ func (h *VideoInfoHandler) LoadVideoList(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *VideoInfoHandler) LoadVideoPList(c *gin.Context) {
+	result, err := h.videoInfoService.LoadVideoPList(c.Request.Context(), formOrQuery(c, "videoId"))
+	if err != nil {
+		if businessError, ok := adminservice.IsBusinessError(err); ok {
+			response.BusinessError(c, businessError.Info, nil)
+			return
+		}
+		log.Printf("admin load video p list: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+
+	response.Success(c, result)
+}
+
 func (h *VideoInfoHandler) AuditVideo(c *gin.Context) {
 	status, err := strconv.Atoi(strings.TrimSpace(formOrQuery(c, "status")))
 	if err != nil {

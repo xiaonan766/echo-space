@@ -9,14 +9,17 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/config"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/response"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 )
 
 var allowedImageExts = map[string]struct{}{
@@ -29,11 +32,12 @@ var allowedImageExts = map[string]struct{}{
 }
 
 type FileHandler struct {
-	resourceRoot string
-	maxImageSize int64
+	resourceRoot        string
+	maxImageSize        int64
+	videoPostRepository *repository.VideoPostRepository
 }
 
-func NewFileHandler(fileConfig config.FileConfig) *FileHandler {
+func NewFileHandler(fileConfig config.FileConfig, videoPostRepository ...*repository.VideoPostRepository) *FileHandler {
 	maxImageMB := fileConfig.MaxImageMB
 	if maxImageMB <= 0 {
 		maxImageMB = 10
@@ -44,9 +48,15 @@ func NewFileHandler(fileConfig config.FileConfig) *FileHandler {
 		resourceRoot = "resources"
 	}
 
+	var videoRepo *repository.VideoPostRepository
+	if len(videoPostRepository) > 0 {
+		videoRepo = videoPostRepository[0]
+	}
+
 	return &FileHandler{
-		resourceRoot: resourceRoot,
-		maxImageSize: int64(maxImageMB) * 1024 * 1024,
+		resourceRoot:        resourceRoot,
+		maxImageSize:        int64(maxImageMB) * 1024 * 1024,
+		videoPostRepository: videoRepo,
 	}
 }
 
@@ -99,6 +109,15 @@ func (h *FileHandler) GetResource(c *gin.Context) {
 	c.File(targetPath)
 }
 
+func (h *FileHandler) GetVideoResource(c *gin.Context) {
+	h.serveVideoResource(c, "index.m3u8")
+}
+
+func (h *FileHandler) GetVideoResourceSegment(c *gin.Context) {
+	resourceName := strings.TrimSpace(c.Param("resourceName"))
+	h.serveVideoResource(c, resourceName)
+}
+
 func (h *FileHandler) saveImage(fileHeader *multipart.FileHeader) (string, error) {
 	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 	if _, ok := allowedImageExts[ext]; !ok {
@@ -140,6 +159,58 @@ func (h *FileHandler) saveImage(fileHeader *multipart.FileHeader) (string, error
 	return filepath.ToSlash(filepath.Join(dirName, fileName)), nil
 }
 
+func (h *FileHandler) serveVideoResource(c *gin.Context, resourceName string) {
+	if h.videoPostRepository == nil {
+		response.NotFound(c)
+		return
+	}
+
+	fileID := strings.TrimSpace(c.Param("fileId"))
+	if !validVideoFileID(fileID) {
+		response.NotFound(c)
+		return
+	}
+
+	resourceName, ok := normalizeVideoResourceName(resourceName)
+	if !ok {
+		response.NotFound(c)
+		return
+	}
+
+	videoFile, err := h.videoPostRepository.FindPostFileByFileID(c.Request.Context(), fileID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		response.NotFound(c)
+		return
+	}
+	if err != nil {
+		log.Printf("load video resource file info: fileID=%s err=%v", fileID, err)
+		response.ServerError(c, nil)
+		return
+	}
+	if strings.TrimSpace(videoFile.FilePath) == "" {
+		response.NotFound(c)
+		return
+	}
+
+	targetPath, ok := h.safeResourcePath(path.Join(videoFile.FilePath, resourceName))
+	if !ok {
+		response.NotFound(c)
+		return
+	}
+	if _, err := os.Stat(targetPath); err != nil {
+		response.NotFound(c)
+		return
+	}
+
+	switch strings.ToLower(filepath.Ext(resourceName)) {
+	case ".m3u8":
+		c.Header("Content-Type", "application/vnd.apple.mpegurl")
+	case ".ts":
+		c.Header("Content-Type", "video/mp2t")
+	}
+	c.File(targetPath)
+}
+
 func (h *FileHandler) safeResourcePath(sourceName string) (string, bool) {
 	cleanName := filepath.Clean(strings.TrimLeft(sourceName, `/\`))
 	if cleanName == "." || strings.HasPrefix(cleanName, "..") || filepath.IsAbs(cleanName) {
@@ -162,6 +233,41 @@ func (h *FileHandler) safeResourcePath(sourceName string) (string, bool) {
 	}
 
 	return targetAbs, true
+}
+
+func normalizeVideoResourceName(resourceName string) (string, bool) {
+	resourceName = strings.Trim(strings.TrimSpace(resourceName), `/\`)
+	if resourceName == "" {
+		resourceName = "index.m3u8"
+	}
+	if resourceName != path.Base(resourceName) || strings.Contains(resourceName, `\`) {
+		return "", false
+	}
+
+	lowerName := strings.ToLower(resourceName)
+	if lowerName == "index.m3u8" || (strings.HasPrefix(lowerName, "segment_") && strings.HasSuffix(lowerName, ".ts")) {
+		return resourceName, true
+	}
+	return "", false
+}
+
+func validVideoFileID(fileID string) bool {
+	if len(fileID) != 20 {
+		return false
+	}
+	for _, char := range fileID {
+		if char >= '0' && char <= '9' {
+			continue
+		}
+		if char >= 'a' && char <= 'z' {
+			continue
+		}
+		if char >= 'A' && char <= 'Z' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func randomFileName(ext string) (string, error) {

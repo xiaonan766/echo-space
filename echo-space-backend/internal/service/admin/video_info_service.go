@@ -62,6 +62,21 @@ func (s *VideoInfoService) LoadVideoList(ctx context.Context, input VideoInfoLis
 	return domain.NewPaginationResult(list, totalCount, input.PageNo, input.PageSize), nil
 }
 
+func (s *VideoInfoService) LoadVideoPList(ctx context.Context, videoID string) ([]domain.VideoInfoFilePostItem, error) {
+	videoID = strings.TrimSpace(videoID)
+	if len(videoID) != 10 || !isAlphaNumeric(videoID) {
+		return nil, &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
+	}
+	files, err := s.videoPostRepository.ListPostFiles(ctx, videoID)
+	if err != nil {
+		return nil, err
+	}
+	if files == nil {
+		files = []domain.VideoInfoFilePostItem{}
+	}
+	return files, nil
+}
+
 func (s *VideoInfoService) AuditVideo(ctx context.Context, input AuditVideoInput) error {
 	input.VideoID = strings.TrimSpace(input.VideoID)
 	input.Reason = strings.TrimSpace(input.Reason)

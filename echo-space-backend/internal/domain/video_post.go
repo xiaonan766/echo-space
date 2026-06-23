@@ -68,6 +68,20 @@ type VideoInfoFilePost struct {
 
 func (VideoInfoFilePost) TableName() string { return "video_info_file_post" }
 
+type VideoInfoFilePostItem struct {
+	FileID         string `gorm:"column:file_id" json:"fileId"`
+	UploadID       string `gorm:"column:upload_id" json:"uploadId"`
+	UserID         string `gorm:"column:user_id" json:"userId"`
+	VideoID        string `gorm:"column:video_id" json:"videoId"`
+	FileIndex      int    `gorm:"column:file_index" json:"fileIndex"`
+	FileName       string `gorm:"column:file_name" json:"fileName"`
+	FileSize       int64  `gorm:"column:file_size" json:"fileSize"`
+	FilePath       string `gorm:"column:file_path" json:"filePath"`
+	UpdateType     int    `gorm:"column:update_type" json:"updateType"`
+	TransferResult int    `gorm:"column:transfer_result" json:"transferResult"`
+	Duration       int    `gorm:"column:duration" json:"duration"`
+}
+
 type UcenterVideoPostItem struct {
 	VideoID        string `gorm:"column:video_id" json:"videoId"`
 	VideoCover     string `gorm:"column:video_cover" json:"videoCover"`
