@@ -31,3 +31,4 @@
 <img width="1909" height="977" alt="image" src="https://github.com/user-attachments/assets/d6ed6a3b-07a4-49cf-9ecb-b29dfacb4174" />
 稿件管理页面
 <img width="1919" height="983" alt="image" src="https://github.com/user-attachments/assets/a06a2b06-5a86-4524-8b10-db772a963871" />
+<img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/f8c81ba9-70c2-4e91-8dd7-4799b0fe89fb" />
