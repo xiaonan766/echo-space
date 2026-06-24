@@ -18,6 +18,8 @@
 稿件管理页面
 <img width="1917" height="987" alt="image" src="https://github.com/user-attachments/assets/b7e196ad-fe13-42ba-a343-071175275e85" />
 <img width="1919" height="991" alt="image" src="https://github.com/user-attachments/assets/6bb5188a-2060-4be8-9dd8-4e469317c0b0" />
+观看视频页面
+<img width="1915" height="988" alt="image" src="https://github.com/user-attachments/assets/4ff0558f-647c-4e87-93d9-23703d544e6f" />
 
 ————  ————   ———  ——— ———  —————— 
 
@@ -34,3 +36,5 @@
 稿件管理页面
 <img width="1919" height="983" alt="image" src="https://github.com/user-attachments/assets/a06a2b06-5a86-4524-8b10-db772a963871" />
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/f8c81ba9-70c2-4e91-8dd7-4799b0fe89fb" />
+审核视频详情页面
+<img width="1919" height="984" alt="image" src="https://github.com/user-attachments/assets/ab415266-19ea-4d7b-9453-ccce7ca9968f" />
