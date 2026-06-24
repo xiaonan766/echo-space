@@ -129,6 +129,27 @@ func (r *InteractRepository) VideoExists(ctx context.Context, videoID string) (b
 	return count > 0, err
 }
 
+func (r *InteractRepository) ListDanmu(ctx context.Context, videoID string, fileID string) ([]domain.WebDanmuItem, error) {
+	var danmuList []domain.WebDanmuItem
+	err := r.db.WithContext(ctx).
+		Table("video_danmu").
+		Select(`
+			danmu_id,
+			video_id,
+			file_id,
+			user_id,
+			COALESCE(DATE_FORMAT(post_time, '%Y-%m-%d %H:%i:%s'), '') AS post_time,
+			COALESCE(text, '') AS text,
+			mode,
+			COALESCE(color, '') AS color,
+			time
+		`).
+		Where("video_id = ? AND file_id = ?", videoID, fileID).
+		Order("danmu_id asc").
+		Scan(&danmuList).Error
+	return danmuList, err
+}
+
 func (r *InteractRepository) FindDanmuTarget(ctx context.Context, videoID string, fileID string) (*domain.DanmuTargetInfo, error) {
 	var target domain.DanmuTargetInfo
 	err := r.db.WithContext(ctx).

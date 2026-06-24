@@ -89,8 +89,10 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	sysSettingGroup.GET("/getSetting", sysSettingHandler.GetSetting)
 	sysSettingGroup.POST("/getSetting", sysSettingHandler.GetSetting)
 
-	danmuGroup := interactGroup.Group("/danmu", middleware.WebAuth(accountService))
-	danmuGroup.POST("/postDanmu", danmuHandler.PostDanmu)
+	danmuGroup := interactGroup.Group("/danmu")
+	danmuGroup.GET("/loadDanmu", danmuHandler.LoadDanmu)
+	danmuGroup.POST("/loadDanmu", danmuHandler.LoadDanmu)
+	danmuGroup.POST("/postDanmu", middleware.WebAuth(accountService), danmuHandler.PostDanmu)
 
 	commentGroup := interactGroup.Group("/comment", middleware.WebAuth(accountService))
 	commentGroup.POST("/postComment", commentHandler.PostComment)

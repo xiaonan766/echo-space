@@ -18,6 +18,25 @@ func NewDanmuHandler(service *webservice.DanmuService) *DanmuHandler {
 	return &DanmuHandler{service: service}
 }
 
+func (h *DanmuHandler) LoadDanmu(c *gin.Context) {
+	result, err := h.service.LoadDanmu(c.Request.Context(), webservice.LoadDanmuInput{
+		FileID:  formOrQuery(c, "fileId"),
+		VideoID: formOrQuery(c, "videoId"),
+	})
+	if err != nil {
+		if businessError, ok := webservice.IsBusinessError(err); ok {
+			response.BusinessError(c, businessError.Info, nil)
+			return
+		}
+
+		log.Printf("web load danmu: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+
+	response.Success(c, result)
+}
+
 func (h *DanmuHandler) PostDanmu(c *gin.Context) {
 	tokenUserInfo, ok := getWebTokenUserInfo(c)
 	if !ok {
@@ -27,12 +46,12 @@ func (h *DanmuHandler) PostDanmu(c *gin.Context) {
 
 	mode, err := strconv.Atoi(formOrQuery(c, "mode"))
 	if err != nil {
-		response.BusinessError(c, "参数错误", nil)
+		response.BusinessError(c, "\u53c2\u6570\u9519\u8bef", nil)
 		return
 	}
 	danmuTime, err := strconv.Atoi(formOrQuery(c, "time"))
 	if err != nil {
-		response.BusinessError(c, "参数错误", nil)
+		response.BusinessError(c, "\u53c2\u6570\u9519\u8bef", nil)
 		return
 	}
 

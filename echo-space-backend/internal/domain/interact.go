@@ -109,6 +109,18 @@ func (VideoDanmu) TableName() string {
 	return "video_danmu"
 }
 
+type WebDanmuItem struct {
+	DanmuID  int    `gorm:"column:danmu_id" json:"danmuId"`
+	VideoID  string `gorm:"column:video_id" json:"videoId"`
+	FileID   string `gorm:"column:file_id" json:"fileId"`
+	UserID   string `gorm:"column:user_id" json:"userId"`
+	PostTime string `gorm:"column:post_time" json:"postTime"`
+	Text     string `gorm:"column:text" json:"text"`
+	Mode     int    `gorm:"column:mode" json:"mode"`
+	Color    string `gorm:"column:color" json:"color"`
+	Time     int    `gorm:"column:time" json:"time"`
+}
+
 type DanmuTargetInfo struct {
 	VideoID     string `gorm:"column:video_id"`
 	FileID      string `gorm:"column:file_id"`
