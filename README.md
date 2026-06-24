@@ -77,6 +77,8 @@ Go 后端服务：http://localhost:7070
 <img width="1912" height="981" alt="image" src="https://github.com/user-attachments/assets/31736197-21fa-4df3-88a1-ddefffd77499" />
 注册页面
 <img width="1912" height="979" alt="image" src="https://github.com/user-attachments/assets/6eba80d4-801f-4f6e-83a8-0f97a8317d4e" />
+首页：
+<img width="1918" height="978" alt="image" src="https://github.com/user-attachments/assets/8b1021ec-d898-47f1-adc9-fffaf99e18f7" />
 周边列表页面
 <img width="1905" height="982" alt="image" src="https://github.com/user-attachments/assets/0044a642-cd3d-412d-a8ae-1b18b9dd78b5" />
 周边详情页面
