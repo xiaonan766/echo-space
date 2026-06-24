@@ -1,8 +1,84 @@
+后端：
+
+语言：Go
+
+Web 框架：Gin
+
+ORM：GORM
+
+数据库：MySQL，数据库名 echo_space
+
+缓存：Redis，支持本地缓存兜底
+
+消息队列：RabbitMQ
+
+搜索：Elasticsearc
+
+视频处理：FFmpeg / FFprobe
+
+配置方式：configs/application.yaml
+
+服务形态：Go 单体服务
+
+—— —— —— —— —— —— —— —— —— —— —— —— ——
+
+前端：
+
+框架：Vue 3
+
+构建工具：Vite
+
+UI 组件库：Element Plus
+
+状态管理：Pinia
+
+路由：Vue Router
+
+请求库：Axios
+
+样式：SCSS / Sass
+
+播放器：ArtPlayer
+
+HLS 播放：hls.js
+
+弹幕：artplayer-plugin-danmuku
+
+图表：ECharts
+
+其他：mitt、js-md5、vue-cropper、vue-draggable-plus、vue-cookies
+
+—— —— —— —— —— —— —— —— —— —— —— —— ——
+
+项目结构
+echo-space
+
+├── echo-space-backend          Go 后端单体服务
+
+├── echo-space-frontend-admin   管理端前端
+
+├── echo-space-frontend-web     用户端前端
+
+├── README.md                   项目展示说明
+
+└── AGENTS.md                   AI 开发规范
+
+—— —— —— —— —— —— —— —— —— —— —— —— ——
+
+端口说明
+用户端前端：http://localhost:3000
+管理端前端：http://localhost:3001
+Go 后端服务：http://localhost:7070
+
+—— —— —— —— —— —— —— —— —— —— —— —— ——
+
 访客端：
 登录页面
 <img width="1912" height="981" alt="image" src="https://github.com/user-attachments/assets/31736197-21fa-4df3-88a1-ddefffd77499" />
 注册页面
 <img width="1912" height="979" alt="image" src="https://github.com/user-attachments/assets/6eba80d4-801f-4f6e-83a8-0f97a8317d4e" />
+首页：
+<img width="1918" height="978" alt="image" src="https://github.com/user-attachments/assets/8b1021ec-d898-47f1-adc9-fffaf99e18f7" />
 周边列表页面
 <img width="1905" height="982" alt="image" src="https://github.com/user-attachments/assets/0044a642-cd3d-412d-a8ae-1b18b9dd78b5" />
 周边详情页面
@@ -18,8 +94,10 @@
 稿件管理页面
 <img width="1917" height="987" alt="image" src="https://github.com/user-attachments/assets/b7e196ad-fe13-42ba-a343-071175275e85" />
 <img width="1919" height="991" alt="image" src="https://github.com/user-attachments/assets/6bb5188a-2060-4be8-9dd8-4e469317c0b0" />
+观看视频页面
+<img width="1915" height="988" alt="image" src="https://github.com/user-attachments/assets/4ff0558f-647c-4e87-93d9-23703d544e6f" />
 
-————  ————   ———  ——— ———  —————— 
+—— —— —— —— —— —— —— —— —— —— —— —— ——
 
 管理端：
 登录页面
@@ -34,3 +112,5 @@
 稿件管理页面
 <img width="1919" height="983" alt="image" src="https://github.com/user-attachments/assets/a06a2b06-5a86-4524-8b10-db772a963871" />
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/f8c81ba9-70c2-4e91-8dd7-4799b0fe89fb" />
+审核视频详情页面
+<img width="1919" height="984" alt="image" src="https://github.com/user-attachments/assets/ab415266-19ea-4d7b-9453-ccce7ca9968f" />
