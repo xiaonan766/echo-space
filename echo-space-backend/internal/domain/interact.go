@@ -40,6 +40,59 @@ type DanmuDeleteInfo struct {
 	VideoID string `gorm:"column:video_id"`
 }
 
+type VideoComment struct {
+	CommentID   int       `gorm:"column:comment_id;primaryKey;autoIncrement" json:"commentId"`
+	PCommentID  int       `gorm:"column:p_comment_id" json:"pCommentId"`
+	VideoID     string    `gorm:"column:video_id" json:"videoId"`
+	VideoUserID string    `gorm:"column:video_user_id" json:"videoUserId"`
+	Content     string    `gorm:"column:content" json:"content"`
+	ImgPath     string    `gorm:"column:img_path" json:"imgPath"`
+	UserID      string    `gorm:"column:user_id" json:"userId"`
+	ReplyUserID string    `gorm:"column:reply_user_id" json:"replyUserId"`
+	TopType     int       `gorm:"column:top_type" json:"topType"`
+	PostTime    time.Time `gorm:"column:post_time" json:"postTime"`
+	LikeCount   int       `gorm:"column:like_count" json:"likeCount"`
+	HateCount   int       `gorm:"column:hate_count" json:"hateCount"`
+}
+
+func (VideoComment) TableName() string {
+	return "video_comment"
+}
+
+type WebCommentItem struct {
+	CommentID     int    `json:"commentId"`
+	PCommentID    int    `json:"pCommentId"`
+	VideoID       string `json:"videoId"`
+	VideoUserID   string `json:"videoUserId"`
+	UserID        string `json:"userId"`
+	Avatar        string `json:"avatar"`
+	NickName      string `json:"nickName"`
+	ReplyUserID   string `json:"replyUserId"`
+	ReplyAvatar   string `json:"replyAvatar"`
+	ReplyNickName string `json:"replyNickName"`
+	Content       string `json:"content"`
+	ImgPath       string `json:"imgPath"`
+	PostTime      string `json:"postTime"`
+	TopType       int    `json:"topType"`
+	LikeCount     int    `json:"likeCount"`
+	HateCount     int    `json:"hateCount"`
+}
+
+type CommentTargetInfo struct {
+	VideoID     string `gorm:"column:video_id"`
+	VideoUserID string `gorm:"column:video_user_id"`
+	Interaction string `gorm:"column:interaction"`
+}
+
+type CommentReplyInfo struct {
+	CommentID  int    `gorm:"column:comment_id"`
+	PCommentID int    `gorm:"column:p_comment_id"`
+	VideoID    string `gorm:"column:video_id"`
+	UserID     string `gorm:"column:user_id"`
+	NickName   string `gorm:"column:nick_name"`
+	Avatar     string `gorm:"column:avatar"`
+}
+
 type VideoDanmu struct {
 	DanmuID  int       `gorm:"column:danmu_id;primaryKey;autoIncrement" json:"danmuId"`
 	VideoID  string    `gorm:"column:video_id" json:"videoId"`

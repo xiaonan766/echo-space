@@ -13,12 +13,13 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Redis    RedisConfig    `yaml:"redis"`
-	MySQL    MySQLConfig    `yaml:"mysql"`
-	RabbitMQ RabbitMQConfig `yaml:"rabbitmq"`
-	Admin    AdminConfig    `yaml:"admin"`
-	File     FileConfig     `yaml:"file"`
+	Server        ServerConfig        `yaml:"server"`
+	Redis         RedisConfig         `yaml:"redis"`
+	MySQL         MySQLConfig         `yaml:"mysql"`
+	RabbitMQ      RabbitMQConfig      `yaml:"rabbitmq"`
+	Admin         AdminConfig         `yaml:"admin"`
+	File          FileConfig          `yaml:"file"`
+	CommentReview CommentReviewConfig `yaml:"commentReview"`
 }
 
 type ServerConfig struct {
@@ -85,6 +86,12 @@ type FileConfig struct {
 	MaxImageMB   int    `yaml:"maxImageMB"`
 }
 
+type CommentReviewConfig struct {
+	Enabled        bool     `yaml:"enabled"`
+	RejectMessage  string   `yaml:"rejectMessage"`
+	SensitiveWords []string `yaml:"sensitiveWords"`
+}
+
 func Load() (Config, error) {
 	cfg := defaultConfig()
 	if err := loadYAML(&cfg); err != nil {
@@ -130,6 +137,17 @@ func defaultConfig() Config {
 		File: FileConfig{
 			ResourceRoot: "resources",
 			MaxImageMB:   10,
+		},
+		CommentReview: CommentReviewConfig{
+			Enabled:       true,
+			RejectMessage: "评论包含敏感内容，请修改后再发布",
+			SensitiveWords: []string{
+				"广告", "推广", "引流", "加微信", "微信号", "微信联系", "vx", "v信",
+				"加QQ", "QQ群", "联系QQ", "兼职", "刷单", "返利", "代刷", "代充",
+				"代付", "低价出售", "博彩", "赌博", "彩票", "赌球", "赌场", "开户",
+				"贷款", "套现", "办证", "发票", "裸聊", "约炮", "色情", "成人网站",
+				"看片", "外挂", "破解", "盗版资源",
+			},
 		},
 	}
 }

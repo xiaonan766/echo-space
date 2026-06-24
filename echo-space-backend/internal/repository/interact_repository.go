@@ -143,6 +143,40 @@ func (r *InteractRepository) FindDanmuTarget(ctx context.Context, videoID string
 	return &target, nil
 }
 
+func (r *InteractRepository) FindCommentTarget(ctx context.Context, videoID string) (*domain.CommentTargetInfo, error) {
+	var target domain.CommentTargetInfo
+	err := r.db.WithContext(ctx).
+		Table("video_info").
+		Select("video_id, user_id AS video_user_id, COALESCE(interaction, '') AS interaction").
+		Where("video_id = ?", videoID).
+		Take(&target).Error
+	if err != nil {
+		return nil, err
+	}
+	return &target, nil
+}
+
+func (r *InteractRepository) FindReplyComment(ctx context.Context, commentID int) (*domain.CommentReplyInfo, error) {
+	var comment domain.CommentReplyInfo
+	err := r.db.WithContext(ctx).
+		Table("video_comment vc").
+		Select(`
+			vc.comment_id,
+			vc.p_comment_id,
+			vc.video_id,
+			vc.user_id,
+			COALESCE(ui.nick_name, '') AS nick_name,
+			COALESCE(ui.avatar, '') AS avatar
+		`).
+		Joins("LEFT JOIN user_info ui ON vc.user_id = ui.user_id").
+		Where("vc.comment_id = ?", commentID).
+		Take(&comment).Error
+	if err != nil {
+		return nil, err
+	}
+	return &comment, nil
+}
+
 func (r *InteractRepository) CreateDanmu(ctx context.Context, danmu domain.VideoDanmu) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&danmu).Error; err != nil {
@@ -151,6 +185,20 @@ func (r *InteractRepository) CreateDanmu(ctx context.Context, danmu domain.Video
 		return tx.Table("video_info").
 			Where("video_id = ?", danmu.VideoID).
 			Update("danmu_count", gorm.Expr("danmu_count + ?", 1)).Error
+	})
+}
+
+func (r *InteractRepository) CreateComment(ctx context.Context, comment *domain.VideoComment) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(comment).Error; err != nil {
+			return err
+		}
+		if comment.PCommentID != 0 {
+			return nil
+		}
+		return tx.Table("video_info").
+			Where("video_id = ?", comment.VideoID).
+			Update("comment_count", gorm.Expr("comment_count + ?", 1)).Error
 	})
 }
 

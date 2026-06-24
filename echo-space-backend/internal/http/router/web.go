@@ -36,6 +36,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	danmuLimiter := cache.NewDanmuRateLimiter(deps.Redis)
 	danmuService := webservice.NewDanmuService(interactRepository, sysSettingStore, danmuLimiter)
 	danmuHandler := webhandler.NewDanmuHandler(danmuService)
+	commentService := webservice.NewCommentService(interactRepository, deps.Config.CommentReview)
+	commentHandler := webhandler.NewCommentHandler(commentService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
 	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
@@ -89,6 +91,9 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 
 	danmuGroup := interactGroup.Group("/danmu", middleware.WebAuth(accountService))
 	danmuGroup.POST("/postDanmu", danmuHandler.PostDanmu)
+
+	commentGroup := interactGroup.Group("/comment", middleware.WebAuth(accountService))
+	commentGroup.POST("/postComment", commentHandler.PostComment)
 
 	shopGroup := group.Group("/shop")
 	shopGroup.GET("/loadRecommend", shopHandler.LoadRecommend)
