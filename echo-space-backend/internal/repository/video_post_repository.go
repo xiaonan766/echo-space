@@ -47,6 +47,17 @@ type VideoTranscodeResult struct {
 	Duration int
 }
 
+type VideoDownloadGenerationJob struct {
+	FileID         string `gorm:"column:file_id"`
+	FileName       string `gorm:"column:file_name"`
+	FilePath       string `gorm:"column:file_path"`
+	VideoID        string `gorm:"column:video_id"`
+	VideoName      string `gorm:"column:video_name"`
+	UserID         string `gorm:"column:user_id"`
+	NickName       string `gorm:"column:nick_name"`
+	DownloadStatus int    `gorm:"column:download_status"`
+}
+
 type UcenterVideoPostListQuery struct {
 	UserID         string
 	PageNo         int
@@ -163,6 +174,7 @@ func (r *VideoPostRepository) ListUserPostsByPage(ctx context.Context, query Uce
 			COALESCE(v.tags, '') AS tags,
 			COALESCE(v.introduction, '') AS introduction,
 			COALESCE(v.interaction, '') AS interaction,
+			COALESCE(v.download_permission, 1) AS download_permission,
 			COALESCE(v.duration, 0) AS duration,
 			COALESCE(vi.play_count, 0) AS play_count,
 			COALESCE(vi.like_count, 0) AS like_count,
@@ -239,6 +251,7 @@ func (r *VideoPostRepository) ListAdminPostsByPage(ctx context.Context, query Ad
 			COALESCE(v.tags, '') AS tags,
 			COALESCE(v.introduction, '') AS introduction,
 			COALESCE(v.interaction, '') AS interaction,
+			COALESCE(v.download_permission, 1) AS download_permission,
 			COALESCE(v.duration, 0) AS duration,
 			COALESCE(vi.play_count, 0) AS play_count,
 			COALESCE(vi.like_count, 0) AS like_count,
@@ -419,17 +432,18 @@ func (r *VideoPostRepository) UpdatePost(ctx context.Context, data SaveEditedVid
 		}
 
 		updates := map[string]any{
-			"video_cover":      data.Post.VideoCover,
-			"video_name":       data.Post.VideoName,
-			"last_update_time": data.Post.LastUpdateTime,
-			"p_category_id":    data.Post.PCategoryID,
-			"category_id":      data.Post.CategoryID,
-			"status":           data.Post.Status,
-			"post_type":        data.Post.PostType,
-			"origin_info":      data.Post.OriginInfo,
-			"tags":             data.Post.Tags,
-			"introduction":     data.Post.Introduction,
-			"interaction":      data.Post.Interaction,
+			"video_cover":         data.Post.VideoCover,
+			"video_name":          data.Post.VideoName,
+			"last_update_time":    data.Post.LastUpdateTime,
+			"p_category_id":       data.Post.PCategoryID,
+			"category_id":         data.Post.CategoryID,
+			"status":              data.Post.Status,
+			"post_type":           data.Post.PostType,
+			"origin_info":         data.Post.OriginInfo,
+			"tags":                data.Post.Tags,
+			"introduction":        data.Post.Introduction,
+			"interaction":         data.Post.Interaction,
+			"download_permission": data.Post.DownloadPermission,
 		}
 		if data.Post.Status == domain.VideoPostStatusTranscoding {
 			updates["duration"] = nil
@@ -503,7 +517,60 @@ func buildVideoInfoFileFromPost(file domain.VideoInfoFilePost) domain.VideoInfoF
 	return domain.VideoInfoFile{
 		FileID: file.FileID, UserID: file.UserID, VideoID: file.VideoID, FileName: file.FileName,
 		FileIndex: file.FileIndex, FileSize: file.FileSize, FilePath: filePath, Duration: duration,
+		DownloadStatus: domain.VideoDownloadStatusNone,
 	}
+}
+
+func (r *VideoPostRepository) ListDownloadGenerationJobs(ctx context.Context, videoID string) ([]VideoDownloadGenerationJob, error) {
+	var jobs []VideoDownloadGenerationJob
+	err := r.db.WithContext(ctx).
+		Table("video_info_file vf").
+		Select(`
+			vf.file_id,
+			COALESCE(vf.file_name, '') AS file_name,
+			COALESCE(vf.file_path, '') AS file_path,
+			vf.video_id,
+			COALESCE(vi.video_name, '') AS video_name,
+			vi.user_id,
+			COALESCE(ui.nick_name, '') AS nick_name,
+			COALESCE(vf.download_status, 0) AS download_status
+		`).
+		Joins("INNER JOIN video_info vi ON vi.video_id = vf.video_id").
+		Joins("LEFT JOIN user_info ui ON ui.user_id = vi.user_id").
+		Where("vf.video_id = ? AND COALESCE(vi.download_permission, 1) = ?", videoID, 1).
+		Order("vf.file_index asc").
+		Scan(&jobs).Error
+	return jobs, err
+}
+
+func (r *VideoPostRepository) MarkVideoFileDownloadGenerating(ctx context.Context, fileID string) error {
+	return r.db.WithContext(ctx).
+		Table("video_info_file").
+		Where("file_id = ?", fileID).
+		Updates(map[string]any{
+			"download_status":    domain.VideoDownloadStatusGenerating,
+			"download_file_path": "",
+		}).Error
+}
+
+func (r *VideoPostRepository) MarkVideoFileDownloadSuccess(ctx context.Context, fileID string, downloadFilePath string) error {
+	return r.db.WithContext(ctx).
+		Table("video_info_file").
+		Where("file_id = ?", fileID).
+		Updates(map[string]any{
+			"download_status":    domain.VideoDownloadStatusSuccess,
+			"download_file_path": downloadFilePath,
+		}).Error
+}
+
+func (r *VideoPostRepository) MarkVideoFileDownloadFailed(ctx context.Context, fileID string) error {
+	return r.db.WithContext(ctx).
+		Table("video_info_file").
+		Where("file_id = ?", fileID).
+		Updates(map[string]any{
+			"download_status":    domain.VideoDownloadStatusFailed,
+			"download_file_path": "",
+		}).Error
 }
 
 func (r *VideoPostRepository) ListTranscodeMessagesForPublish(ctx context.Context, limit int, publishedBefore time.Time) ([]domain.VideoTranscodeMessageRecord, error) {

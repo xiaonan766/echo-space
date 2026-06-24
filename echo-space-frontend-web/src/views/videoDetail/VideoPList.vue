@@ -47,6 +47,7 @@ const autoPlay = ref(true);
 const currentP = ref(route.query.p ? Number.parseInt(route.query.p) : 1);
 const emit = defineEmits(["selectVideoFile"]);
 const videoList = ref([]);
+const currentVideoFile = inject("currentVideoFile");
 const loadVideoPList = async () => {
   let result = await proxy.Request({
     url: proxy.Api.loadVideoPList,
@@ -75,7 +76,13 @@ const selectVideo = (index) => {
 };
 
 const selectVideoFile = () => {
-  mitter.emit("changeP", videoList.value[currentP.value - 1].fileId);
+  const selectedFile = videoList.value[currentP.value - 1];
+  if (!selectedFile) {
+    currentVideoFile.value = {};
+    return;
+  }
+  currentVideoFile.value = selectedFile;
+  mitter.emit("changeP", selectedFile.fileId);
 };
 
 onMounted(() => {

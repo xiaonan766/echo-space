@@ -47,18 +47,19 @@ type VideoPostUploadFile struct {
 }
 
 type SaveVideoPostInput struct {
-	UserID         string
-	VideoID        string
-	VideoCover     string
-	VideoName      string
-	PCategoryID    int
-	CategoryID     *int
-	PostType       int
-	OriginInfo     string
-	Tags           string
-	Introduction   string
-	Interaction    string
-	UploadFileList []VideoPostUploadFile
+	UserID             string
+	VideoID            string
+	VideoCover         string
+	VideoName          string
+	PCategoryID        int
+	CategoryID         *int
+	PostType           int
+	OriginInfo         string
+	Tags               string
+	Introduction       string
+	Interaction        string
+	DownloadPermission int
+	UploadFileList     []VideoPostUploadFile
 }
 
 type LoadUcenterVideoListInput struct {
@@ -450,6 +451,9 @@ func validateVideoPostInput(input SaveVideoPostInput) error {
 	if utf8.RuneCountInString(input.Interaction) > maxVideoInteractionLength || !validVideoInteraction(input.Interaction) {
 		return &BusinessError{Info: "\u4e92\u52a8\u8bbe\u7f6e\u4e0d\u6b63\u786e"}
 	}
+	if input.DownloadPermission != 0 && input.DownloadPermission != 1 {
+		return &BusinessError{Info: "下载设置不正确"}
+	}
 	if len(input.UploadFileList) == 0 {
 		return &BusinessError{Info: "\u8bf7\u81f3\u5c11\u4e0a\u4f20\u4e00\u4e2a\u89c6\u9891\u6587\u4ef6"}
 	}
@@ -471,7 +475,7 @@ func buildVideoPost(input SaveVideoPostInput, videoID string, now time.Time, sta
 	post := domain.VideoInfoPost{
 		VideoID: videoID, VideoCover: input.VideoCover, VideoName: input.VideoName, UserID: input.UserID,
 		CreateTime: now, LastUpdateTime: now, PCategoryID: input.PCategoryID, CategoryID: input.CategoryID,
-		Status: status, PostType: input.PostType, Tags: input.Tags, DownloadPermission: 1,
+		Status: status, PostType: input.PostType, Tags: input.Tags, DownloadPermission: input.DownloadPermission,
 	}
 	post.OriginInfo = optionalString(input.OriginInfo)
 	post.Introduction = optionalString(input.Introduction)
@@ -484,7 +488,8 @@ func videoPostMetadataChanged(current domain.VideoInfoPost, input SaveVideoPostI
 		current.PCategoryID != input.PCategoryID || !equalOptionalInt(current.CategoryID, input.CategoryID) ||
 		current.PostType != input.PostType || optionalStringValue(current.OriginInfo) != input.OriginInfo ||
 		current.Tags != input.Tags || optionalStringValue(current.Introduction) != input.Introduction ||
-		optionalStringValue(current.Interaction) != input.Interaction
+		optionalStringValue(current.Interaction) != input.Interaction ||
+		current.DownloadPermission != input.DownloadPermission
 }
 
 func safeResourceSubdirectory(root string, relative string) (string, error) {

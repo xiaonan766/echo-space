@@ -27,7 +27,13 @@
     >
       {{ videoInfo.collectCount }}
     </div>
-    <div class="download-btn" @click="downloadVideo">下载视频</div>
+    <div
+      v-if="showDownloadButton"
+      class="iconfont icon-down download-action"
+      @click="downloadVideo"
+    >
+      下载
+    </div>
   </div>
   <VideoCoin ref="videoCoinRef"></VideoCoin>
 </template>
@@ -40,13 +46,14 @@ import { ACTION_TYPE } from "@/utils/Constants";
 import { useLoginStore } from "@/stores/loginStore";
 const loginStore = useLoginStore();
 
-import { ref, reactive, getCurrentInstance, nextTick, inject } from "vue";
+import { computed, ref, reactive, getCurrentInstance, nextTick, inject } from "vue";
 const { proxy } = getCurrentInstance();
 import { useRoute, useRouter } from "vue-router";
 const route = useRoute();
 const router = useRouter();
 
 const videoInfo = inject("videoInfo");
+const currentVideoFile = inject("currentVideoFile");
 
 const userAction = (type) => {
   if (Object.keys(loginStore.userInfo).length == 0) {
@@ -94,13 +101,27 @@ const userActionCoin = () => {
 };
 
 const downloadVideo = () => {
-  if (!videoInfo.value.fileId) {
+  const fileId = currentVideoFile.value?.fileId;
+  if (!fileId) {
     proxy.Message.warning("当前视频文件不存在");
     return;
   }
-  const downloadUrl = `/api${proxy.Api.downloadVideo}/${encodeURIComponent(videoInfo.value.fileId)}`;
+  if (Number(currentVideoFile.value?.downloadStatus) !== 2) {
+    proxy.Message.warning("视频下载文件正在生成，请稍后再试");
+    return;
+  }
+  const downloadUrl = `/api${proxy.Api.downloadVideo}/${encodeURIComponent(fileId)}`;
   window.open(downloadUrl, "_blank");
 };
+
+const showDownloadButton = computed(() => {
+  const downloadPermission = videoInfo.value.downloadPermission;
+  const canDownload =
+    downloadPermission === undefined ||
+    downloadPermission === null ||
+    Number(downloadPermission) === 1;
+  return canDownload && !!currentVideoFile.value?.fileId;
+});
 </script>
 
 <style lang="scss" scoped>
@@ -129,16 +150,9 @@ const downloadVideo = () => {
       color: var(--blue);
     }
   }
-  .download-btn {
-    cursor: pointer;
-    border: 1px solid #e3e5e7;
-    color: #61666d;
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-size: 14px;
-    &:hover {
-      color: var(--blue);
-      border-color: var(--blue);
+  .download-action {
+    &::before {
+      color: #61666d;
     }
   }
 }

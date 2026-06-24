@@ -67,6 +67,7 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	fileGroup.GET("/videoResource/:fileId", webFileHandler.GetPublishedVideoResource)
 	fileGroup.GET("/videoResource/:fileId/", webFileHandler.GetPublishedVideoResource)
 	fileGroup.GET("/videoResource/:fileId/:resourceName", webFileHandler.GetPublishedVideoResourceSegment)
+	fileGroup.GET("/downloadVideo/:fileId", webFileHandler.DownloadVideo)
 
 	categoryGroup := group.Group("/category")
 	categoryGroup.GET("/loadAllCategory", categoryHandler.LoadAllCategory)
@@ -77,6 +78,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	videoGroup.POST("/loadRecommendVideo", videoHandler.LoadRecommendVideo)
 	videoGroup.GET("/loadVideo", videoHandler.LoadVideo)
 	videoGroup.POST("/loadVideo", videoHandler.LoadVideo)
+	videoGroup.GET("/getVideoInfo", videoHandler.GetVideoInfo)
+	videoGroup.POST("/getVideoInfo", videoHandler.GetVideoInfo)
 	videoGroup.GET("/loadVideoPList", videoHandler.LoadVideoPList)
 	videoGroup.POST("/loadVideoPList", videoHandler.LoadVideoPList)
 

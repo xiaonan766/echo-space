@@ -2,8 +2,11 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+
+	"gorm.io/gorm"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
@@ -61,6 +64,28 @@ func (s *VideoService) LoadRecommendVideo(ctx context.Context) ([]domain.WebVide
 	}
 	fillWebVideoPlayTime(list)
 	return list, nil
+}
+
+func (s *VideoService) GetVideoInfo(ctx context.Context, videoID string) (domain.WebVideoDetail, error) {
+	videoID = strings.TrimSpace(videoID)
+	if len(videoID) != 10 || !isValidPublicVideoID(videoID) {
+		return domain.WebVideoDetail{}, &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
+	}
+
+	videoInfo, err := s.videoRepository.FindWebVideoByID(ctx, videoID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return domain.WebVideoDetail{}, &BusinessError{Info: "\u89c6\u9891\u4e0d\u5b58\u5728"}
+	}
+	if err != nil {
+		return domain.WebVideoDetail{}, err
+	}
+	videoList := []domain.WebVideoItem{*videoInfo}
+	fillWebVideoPlayTime(videoList)
+
+	return domain.WebVideoDetail{
+		VideoInfo:      videoList[0],
+		UserActionList: []interface{}{},
+	}, nil
 }
 
 func (s *VideoService) LoadVideoPList(ctx context.Context, videoID string) ([]domain.VideoInfoFile, error) {

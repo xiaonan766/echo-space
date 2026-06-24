@@ -35,6 +35,7 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	videoPostRepository := repository.NewVideoPostRepository(deps.DB)
 	videoSettingStore := cache.NewSysSettingStore(deps.Cache, "echo-space:sys_setting")
 	videoInfoService := adminservice.NewVideoInfoService(videoPostRepository, videoSettingStore)
+	videoInfoService.SetDownloadGenerator(adminservice.NewVideoDownloadGenerator(videoPostRepository, deps.Config.File.ResourceRoot))
 	videoInfoHandler := adminhandler.NewVideoInfoHandler(videoInfoService)
 	fileHandler := filehandler.NewFileHandler(deps.Config.File, videoPostRepository)
 

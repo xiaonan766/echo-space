@@ -190,6 +190,9 @@ getVideoInfo();
 
 provide("videoInfo", videoInfo);
 
+const currentVideoFile = ref({});
+provide("currentVideoFile", currentVideoFile);
+
 //播放器高度
 const playerHeight = ref(0);
 provide("playerHeight", (height) => {

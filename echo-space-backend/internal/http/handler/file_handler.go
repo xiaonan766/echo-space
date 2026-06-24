@@ -134,6 +134,51 @@ func (h *FileHandler) GetPublishedVideoResourceSegment(c *gin.Context) {
 	h.servePublishedVideoResource(c, resourceName)
 }
 
+func (h *FileHandler) DownloadVideo(c *gin.Context) {
+	if h.videoRepository == nil {
+		response.NotFound(c)
+		return
+	}
+
+	fileID := strings.TrimSpace(c.Param("fileId"))
+	if !validVideoFileID(fileID) {
+		response.NotFound(c)
+		return
+	}
+
+	videoFile, err := h.videoRepository.FindDownloadVideoFileByFileID(c.Request.Context(), fileID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		response.NotFound(c)
+		return
+	}
+	if err != nil {
+		log.Printf("load download video file info: fileID=%s err=%v", fileID, err)
+		response.ServerError(c, nil)
+		return
+	}
+	if videoFile.DownloadPermission != 1 {
+		response.BusinessError(c, "视频不允许下载", nil)
+		return
+	}
+	if videoFile.DownloadStatus != 2 || strings.TrimSpace(videoFile.DownloadFilePath) == "" {
+		response.BusinessError(c, "视频下载文件尚未生成", nil)
+		return
+	}
+
+	targetPath, ok := h.safeResourcePath(videoFile.DownloadFilePath)
+	if !ok {
+		response.NotFound(c)
+		return
+	}
+	if _, err := os.Stat(targetPath); err != nil {
+		response.NotFound(c)
+		return
+	}
+
+	c.Header("Content-Type", "video/mp4")
+	c.FileAttachment(targetPath, sanitizeDownloadFileName(videoFile.VideoName, videoFile.FileName))
+}
+
 func (h *FileHandler) saveImage(fileHeader *multipart.FileHeader) (string, error) {
 	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 	if _, ok := allowedImageExts[ext]; !ok {
@@ -324,6 +369,33 @@ func validVideoFileID(fileID string) bool {
 		return false
 	}
 	return true
+}
+
+func sanitizeDownloadFileName(videoName string, fileName string) string {
+	name := strings.TrimSpace(videoName)
+	partName := strings.TrimSpace(fileName)
+	if partName != "" {
+		name = strings.TrimSpace(name + "-" + partName)
+	}
+	if name == "" {
+		name = "echo-space-video"
+	}
+	replacer := strings.NewReplacer(
+		`/`, "_",
+		`\`, "_",
+		`:`, "_",
+		`*`, "_",
+		`?`, "_",
+		`"`, "_",
+		`<`, "_",
+		`>`, "_",
+		`|`, "_",
+	)
+	name = replacer.Replace(name)
+	if !strings.HasSuffix(strings.ToLower(name), ".mp4") {
+		name += ".mp4"
+	}
+	return name
 }
 
 func randomFileName(ext string) (string, error) {

@@ -14,6 +14,7 @@ import (
 type VideoInfoService struct {
 	videoPostRepository *repository.VideoPostRepository
 	settingStore        *cache.SysSettingStore
+	downloadGenerator   *VideoDownloadGenerator
 }
 
 type VideoInfoListInput struct {
@@ -41,6 +42,13 @@ func NewVideoInfoService(videoPostRepository *repository.VideoPostRepository, se
 		videoPostRepository: videoPostRepository,
 		settingStore:        store,
 	}
+}
+
+func (s *VideoInfoService) SetDownloadGenerator(downloadGenerator *VideoDownloadGenerator) {
+	if s == nil {
+		return
+	}
+	s.downloadGenerator = downloadGenerator
 }
 
 func (s *VideoInfoService) LoadVideoList(ctx context.Context, input VideoInfoListInput) (domain.PaginationResult[domain.AdminVideoPostItem], error) {
@@ -114,6 +122,9 @@ func (s *VideoInfoService) AuditVideo(ctx context.Context, input AuditVideoInput
 	}
 	if errors.Is(err, repository.ErrVideoNoPublishableFiles) {
 		return &BusinessError{Info: "\u89c6\u9891\u6587\u4ef6\u4e0d\u5b58\u5728\u6216\u672a\u8f6c\u7801\u5b8c\u6210"}
+	}
+	if err == nil && input.Status == domain.VideoPostStatusApproved && s.downloadGenerator != nil {
+		s.downloadGenerator.GenerateAsync(input.VideoID)
 	}
 	return err
 }

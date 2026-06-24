@@ -36,6 +36,15 @@ func (h *VideoPostHandler) PostVideo(c *gin.Context) {
 		response.BusinessError(c, "\u8bf7\u9009\u62e9\u6b63\u786e\u7684\u6295\u7a3f\u7c7b\u578b", nil)
 		return
 	}
+	downloadPermission := 1
+	if value := strings.TrimSpace(c.PostForm("downloadPermission")); value != "" {
+		parsed, parseErr := strconv.Atoi(value)
+		if parseErr != nil || (parsed != 0 && parsed != 1) {
+			response.BusinessError(c, "请选择正确的视频下载设置", nil)
+			return
+		}
+		downloadPermission = parsed
+	}
 	var categoryID *int
 	if value := strings.TrimSpace(c.PostForm("categoryId")); value != "" {
 		parsed, parseErr := strconv.Atoi(value)
@@ -57,7 +66,8 @@ func (h *VideoPostHandler) PostVideo(c *gin.Context) {
 		PCategoryID: pCategoryID, CategoryID: categoryID, PostType: postType,
 		OriginInfo: c.PostForm("originInfo"), Tags: c.PostForm("tags"),
 		Introduction: c.PostForm("introduction"), Interaction: c.PostForm("interaction"),
-		UploadFileList: uploadFileList,
+		DownloadPermission: downloadPermission,
+		UploadFileList:     uploadFileList,
 	})
 	if err != nil {
 		if businessError, ok := webservice.IsBusinessError(err); ok {

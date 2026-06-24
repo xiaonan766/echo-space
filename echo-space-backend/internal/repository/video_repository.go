@@ -40,6 +40,7 @@ const webVideoSelectColumns = `
 	COALESCE(vi.tags, '') AS tags,
 	COALESCE(vi.introduction, '') AS introduction,
 	COALESCE(vi.interaction, '') AS interaction,
+	COALESCE(vi.download_permission, 1) AS download_permission,
 	COALESCE(vi.duration, 0) AS duration,
 	COALESCE(vi.play_count, 0) AS play_count,
 	COALESCE(vi.like_count, 0) AS like_count,
@@ -62,7 +63,9 @@ func (r *VideoRepository) ListVideoFiles(ctx context.Context, videoID string) ([
 			file_index,
 			file_size,
 			COALESCE(file_path, '') AS file_path,
-			COALESCE(duration, 0) AS duration
+			COALESCE(duration, 0) AS duration,
+			COALESCE(download_status, 0) AS download_status,
+			COALESCE(download_file_path, '') AS download_file_path
 		`).
 		Where("video_id = ?", videoID).
 		Order("file_index asc").
@@ -82,7 +85,9 @@ func (r *VideoRepository) FindVideoFileByFileID(ctx context.Context, fileID stri
 			file_index,
 			file_size,
 			COALESCE(file_path, '') AS file_path,
-			COALESCE(duration, 0) AS duration
+			COALESCE(duration, 0) AS duration,
+			COALESCE(download_status, 0) AS download_status,
+			COALESCE(download_file_path, '') AS download_file_path
 		`).
 		Where("file_id = ?", fileID).
 		Take(&file).Error
@@ -90,6 +95,42 @@ func (r *VideoRepository) FindVideoFileByFileID(ctx context.Context, fileID stri
 		return nil, err
 	}
 	return &file, nil
+}
+
+func (r *VideoRepository) FindDownloadVideoFileByFileID(ctx context.Context, fileID string) (*domain.DownloadVideoFile, error) {
+	var file domain.DownloadVideoFile
+	err := r.db.WithContext(ctx).
+		Table("video_info_file vf").
+		Select(`
+			vf.file_id,
+			COALESCE(vf.file_name, '') AS file_name,
+			vf.video_id,
+			COALESCE(vi.video_name, '') AS video_name,
+			COALESCE(vi.download_permission, 1) AS download_permission,
+			COALESCE(vf.download_status, 0) AS download_status,
+			COALESCE(vf.download_file_path, '') AS download_file_path
+		`).
+		Joins("INNER JOIN video_info vi ON vi.video_id = vf.video_id").
+		Where("vf.file_id = ?", fileID).
+		Take(&file).Error
+	if err != nil {
+		return nil, err
+	}
+	return &file, nil
+}
+
+func (r *VideoRepository) FindWebVideoByID(ctx context.Context, videoID string) (*domain.WebVideoItem, error) {
+	var video domain.WebVideoItem
+	err := r.db.WithContext(ctx).
+		Table("video_info vi").
+		Select(webVideoSelectColumns).
+		Joins("LEFT JOIN user_info ui ON vi.user_id = ui.user_id").
+		Where("vi.video_id = ?", videoID).
+		Take(&video).Error
+	if err != nil {
+		return nil, err
+	}
+	return &video, nil
 }
 
 func (r *VideoRepository) ListWebVideoByPage(ctx context.Context, query WebVideoListQuery) ([]domain.WebVideoItem, int64, error) {
