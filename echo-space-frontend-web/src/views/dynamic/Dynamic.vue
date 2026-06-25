@@ -351,7 +351,8 @@ const formatCount = (count) => {
 
 <style lang="scss" scoped>
 .dynamic-page {
-  width: 1040px;
+  width: 1200px;
+  max-width: calc(100vw - 48px);
   margin: 20px auto 50px;
   min-height: 520px;
 }
@@ -376,9 +377,13 @@ const formatCount = (count) => {
 
 .dynamic-layout {
   display: grid;
-  grid-template-columns: 240px 760px;
+  grid-template-columns: 240px minmax(0, 1fr);
   gap: 20px;
   align-items: start;
+}
+
+.dynamic-main {
+  min-width: 0;
 }
 
 .dynamic-sidebar {
@@ -429,8 +434,8 @@ const formatCount = (count) => {
 
 .fixed-image-box {
   margin-top: 12px;
-  height: 170px;
-  background: #fff;
+  height: 260px;
+  background: url('@/assets/dynamic/sidebar-banner.png') center / cover no-repeat;
   border: 1px solid #eef0f2;
   border-radius: 6px;
 }
@@ -593,7 +598,7 @@ const formatCount = (count) => {
 
 .video-card {
   margin-top: 12px;
-  width: 560px;
+  width: 100%;
   min-height: 132px;
   border: 1px solid #e3e5e7;
   border-radius: 6px;
