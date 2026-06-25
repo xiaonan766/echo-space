@@ -96,6 +96,9 @@ Go 后端服务：http://localhost:7070
 <img width="1919" height="991" alt="image" src="https://github.com/user-attachments/assets/6bb5188a-2060-4be8-9dd8-4e469317c0b0" />
 观看视频页面
 <img width="1915" height="988" alt="image" src="https://github.com/user-attachments/assets/4ff0558f-647c-4e87-93d9-23703d544e6f" />
+评论页面
+<img width="1919" height="984" alt="image" src="https://github.com/user-attachments/assets/0df5952b-5a09-4ed8-a87f-6b66ea8b968c" />
+<img width="1914" height="983" alt="image" src="https://github.com/user-attachments/assets/4fa63ab3-13cd-4daa-8f1a-656d7f1c445a" />
 
 —— —— —— —— —— —— —— —— —— —— —— —— ——
 
