@@ -102,6 +102,53 @@ func TestPostCommentRouteRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestUserActionRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/interact/userAction/doAction", strings.NewReader("videoId=Abc123Def4&actionType=2"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
+func TestLoadCommentRouteDoesNotRequireLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/interact/comment/loadComment", strings.NewReader("videoId=bad"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code == response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want non-login response", result.Code)
+	}
+	if result.Code != response.CodeBusinessFail {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeBusinessFail)
+	}
+}
+
 func TestWebAutoLoginWithoutTokenReturnsSuccess(t *testing.T) {
 	cfg := config.Config{}
 	cfg.Server.Mode = "test"
@@ -132,6 +179,28 @@ func TestWebGetUserCountInfoRouteRequiresLogin(t *testing.T) {
 	engine := New(Dependencies{Config: cfg})
 
 	request := httptest.NewRequest(http.MethodPost, "/web/account/getUserCountInfo", nil)
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
+func TestWebUhomeFocusRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/uhome/focus", strings.NewReader("focusUserId=1000000002"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, request)
 

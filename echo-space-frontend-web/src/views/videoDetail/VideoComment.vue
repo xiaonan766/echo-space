@@ -5,191 +5,295 @@
         评论<span class="comment-count">{{ dataSource.totalCount }}</span>
       </div>
       <div
-          :class="['order-type-item', orderType == 0 ? 'active' : '']"
-          @click="changeOrder(0)"
+        :class="['order-type-item', orderType == 0 ? 'active' : '']"
+        @click="changeOrder(0)"
       >
         最热
       </div>
-      <el-divider direction="vertical"/>
+      <el-divider direction="vertical" />
       <div
-          :class="['order-type-item', orderType == 1 ? 'active' : '']"
-          @click="changeOrder(1)"
+        :class="['order-type-item', orderType == 1 ? 'active' : '']"
+        @click="changeOrder(1)"
       >
         最新
       </div>
     </div>
     <div class="comment-content-panel">
-      <VideoCommentSend
-          :sendType="0"
-          :showSend="showComment"
-      ></VideoCommentSend>
+      <VideoCommentSend :sendType="0" :showSend="showComment"></VideoCommentSend>
       <div class="comment-list">
-        <DataLoadMoreList
-            :dataSource="dataSource"
-            :loading="loadingData"
-            @loadData="loadCommentList"
-            layoutType="list"
-            loadEndMsg="没有更多评论"
+        <VideoCommentItem
+          v-for="item in dataSource.list"
+          :key="item.commentId"
+          :data="item"
+        ></VideoCommentItem>
+        <div class="bottom-loading" v-if="loadingData">
+          <img :src="proxy.Utils.getLocalImage('playing.gif')" />评论加载中...
+        </div>
+        <div
+          class="reach-bottom"
+          v-if="!loadingData && dataSource.list.length > 0 && !dataSource.hasMore"
         >
-          <template #default="{ data }">
-            <VideoCommentItem :data="data"></VideoCommentItem>
-          </template>
-        </DataLoadMoreList>
+          没有更多评论
+        </div>
+        <NoData v-if="!loadingData && showComment && dataSource.list.length == 0"></NoData>
+        <div v-if="!showComment" class="comment-closed">UP主已关闭评论区</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import {mitter} from "@/eventbus/eventBus.js";
-import {ACTION_TYPE} from "@/utils/Constants.js";
+import { mitter } from "@/eventbus/eventBus.js";
+import { ACTION_TYPE } from "@/utils/Constants.js";
 import VideoCommentItem from "./VideoCommentItem.vue";
 import VideoCommentSend from "./VideoCommentSend.vue";
-import {computed, getCurrentInstance, inject, onMounted, onUnmounted, provide, ref,} from "vue";
-import {useRoute, useRouter} from "vue-router";
-import {useLoginStore} from "@/stores/loginStore";
+import {
+  computed,
+  getCurrentInstance,
+  inject,
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+} from "vue";
+import { useRoute } from "vue-router";
 
-const {proxy} = getCurrentInstance();
+const { proxy } = getCurrentInstance();
 const route = useRoute();
-const router = useRouter();
-const loginStore = useLoginStore();
 
-//判断是否显示弹幕
 const videoInfo = inject("videoInfo");
 const showComment = computed(() => {
   return (
-      videoInfo.value.interaction == null ||
-      videoInfo.value.interaction.indexOf("1") == -1
+    videoInfo.value.interaction == null ||
+    videoInfo.value.interaction.indexOf("1") == -1
   );
 });
 
-const showReplyHandler = (commentId) => {
-  dataSource.value.list.forEach((item) => {
-    if (item.commentId != commentId) {
-      item.showReply = false;
-    } else {
-      item.showReply = true;
-    }
-  });
-};
-provide("showReply", showReplyHandler);
+const createEmptyCommentData = () => ({
+  totalCount: 0,
+  pageSize: 15,
+  list: [],
+  nextCursor: "",
+  hasMore: false,
+});
 
 const loadingData = ref(false);
-const dataSource = ref({});
+const dataSource = ref(createEmptyCommentData());
 const orderType = ref(0);
 
-const changeOrder = (_orderType) => {
-  orderType.value = _orderType;
-  loadCommentList();
+const ensureCommentState = (comment) => {
+  if (!comment.children) {
+    comment.children = [];
+  }
+  if (comment.replyCount == null) {
+    comment.replyCount = comment.children.length;
+  }
+  if (comment.replyCursor == null) {
+    comment.replyCursor = "";
+  }
+  if (comment.replyHasMore == null) {
+    comment.replyHasMore = false;
+  }
+  if (comment.replyLoading == null) {
+    comment.replyLoading = false;
+  }
+  if (comment.childrenLoaded == null) {
+    comment.childrenLoaded = comment.children.length > 0;
+  }
+  if (comment.showReply == null) {
+    comment.showReply = false;
+  }
+  return comment;
 };
 
-const loadCommentList = async () => {
-  if (!showComment.value) {
+const setCommentActive = (userActionMap, item) => {
+  item.likeCountActive = false;
+  item.hateCountActive = false;
+  const userAction = userActionMap[item.commentId];
+  if (!userAction) {
     return;
   }
+  if (ACTION_TYPE.COMMENT_LIKE.value == userAction.actionType) {
+    item.likeCountActive = true;
+  } else if (ACTION_TYPE.COMMENT_HATE.value == userAction.actionType) {
+    item.hateCountActive = true;
+  }
+};
+
+const applyUserActions = (commentList, userActionList = []) => {
+  const userActionMap = {};
+  userActionList.forEach((item) => {
+    userActionMap[item.commentId] = item;
+  });
+  commentList.forEach((item) => {
+    ensureCommentState(item);
+    setCommentActive(userActionMap, item);
+  });
+};
+
+const resetCommentList = () => {
+  dataSource.value = createEmptyCommentData();
+};
+
+const changeOrder = (_orderType) => {
+  if (orderType.value == _orderType && dataSource.value.list.length > 0) {
+    return;
+  }
+  orderType.value = _orderType;
+  loadCommentList(true);
+};
+
+const loadCommentList = async (reset = false) => {
+  if (!showComment.value || loadingData.value) {
+    return;
+  }
+  if (!reset && dataSource.value.list.length > 0 && !dataSource.value.hasMore) {
+    return;
+  }
+
   loadingData.value = true;
-  let result = await proxy.Request({
+  const result = await proxy.Request({
     url: proxy.Api.loadComment,
     params: {
       videoId: route.params.videoId,
-      pageNo: dataSource.value.pageNo,
       orderType: orderType.value,
+      cursor: reset ? "" : dataSource.value.nextCursor,
     },
+    showError: true,
   });
   loadingData.value = false;
   if (!result) {
     return;
   }
-  const userActionMap = {};
-  const userActionList = result.data.userActionList;
-  userActionList.forEach((item) => {
-    userActionMap[item.commentId] = item;
-  });
-  const commentData = result.data.commentData;
-  commentData.list.forEach((item) => {
-    setCommentActive(userActionMap, item);
-    if (item.children) {
-      item.children.forEach((sub) => {
-        setCommentActive(userActionMap, sub);
-      });
-    }
-  });
-  const dataList = dataSource.value.list;
-  dataSource.value = Object.assign({}, commentData);
-  if (commentData.pageNo > 1) {
-    dataSource.value.list = dataList.concat(commentData.list);
+  if (result.data == null) {
+    resetCommentList();
+    return;
   }
-};
-loadCommentList();
 
-//设置已点赞
-const setCommentActive = (userActionMap, item) => {
-  const userActon = userActionMap[item.commentId];
-  if (userActon) {
-    if (ACTION_TYPE.COMMENT_LIKE.value == userActon.actionType) {
-      item.likeCountActive = true;
-    } else if (ACTION_TYPE.COMMENT_HATE.value == userActon.actionType) {
-      item.hateCountActive = true;
-    }
-  }
+  const commentData = result.data.commentData || createEmptyCommentData();
+  const list = commentData.list || [];
+  applyUserActions(list, result.data.userActionList || []);
+
+  dataSource.value = {
+    totalCount: commentData.totalCount || 0,
+    pageSize: commentData.pageSize || 15,
+    list: reset ? list : dataSource.value.list.concat(list),
+    nextCursor: commentData.nextCursor || "",
+    hasMore: !!commentData.hasMore,
+  };
 };
 
-//删除评论
-const delCommentCallback = ({pCommentId, commentId}) => {
+const loadReplyList = async (parentComment, reset = false) => {
+  if (!parentComment || parentComment.replyLoading) {
+    return;
+  }
+  ensureCommentState(parentComment);
+  if (!reset && parentComment.childrenLoaded && !parentComment.replyHasMore) {
+    return;
+  }
+
+  parentComment.replyLoading = true;
+  const result = await proxy.Request({
+    url: proxy.Api.loadComment,
+    params: {
+      videoId: route.params.videoId,
+      pCommentId: parentComment.commentId,
+      cursor: reset ? "" : parentComment.replyCursor,
+    },
+  });
+  parentComment.replyLoading = false;
+  if (!result || result.data == null) {
+    return;
+  }
+
+  const commentData = result.data.commentData || {};
+  const replyList = commentData.list || [];
+  applyUserActions(replyList, result.data.userActionList || []);
+  parentComment.children = reset
+    ? replyList
+    : (parentComment.children || []).concat(replyList);
+  parentComment.replyCount = commentData.totalCount || parentComment.replyCount || 0;
+  parentComment.replyCursor = commentData.nextCursor || "";
+  parentComment.replyHasMore = !!commentData.hasMore;
+  parentComment.childrenLoaded = true;
+};
+
+const showReplyHandler = (commentId) => {
+  dataSource.value.list.forEach((item) => {
+    item.showReply = commentId ? item.commentId == commentId : false;
+  });
+};
+
+provide("showReply", showReplyHandler);
+provide("loadReplyList", loadReplyList);
+
+const handleWindowScroll = (curScrollTop) => {
+  if (window.innerHeight + curScrollTop < document.body.offsetHeight - 30) {
+    return;
+  }
+  loadCommentList(false);
+};
+
+const handlePostCommentSuccess = (comment) => {
+  ensureCommentState(comment);
+  if (comment.pCommentId === 0) {
+    dataSource.value.list.unshift(comment);
+    dataSource.value.totalCount++;
+    return;
+  }
+
+  const parentComment = dataSource.value.list.find((item) => {
+    return item.commentId == comment.pCommentId;
+  });
+  if (!parentComment) {
+    return;
+  }
+  ensureCommentState(parentComment);
+  parentComment.replyCount++;
+  if (parentComment.childrenLoaded) {
+    parentComment.children.push(comment);
+  }
+};
+
+const handleDelCommentCallback = ({ pCommentId, commentId }) => {
+  if (pCommentId == 0) {
+    dataSource.value.list = dataSource.value.list.filter((item) => {
+      return item.commentId != commentId;
+    });
+    dataSource.value.totalCount = Math.max(dataSource.value.totalCount - 1, 0);
+    return;
+  }
+
+  const parentComment = dataSource.value.list.find((item) => {
+    return item.commentId == pCommentId;
+  });
+  if (!parentComment) {
+    return;
+  }
+  ensureCommentState(parentComment);
+  parentComment.children = parentComment.children.filter((item) => {
+    return item.commentId != commentId;
+  });
+  parentComment.replyCount = Math.max(parentComment.replyCount - 1, 0);
+};
+
+const handleTopCommentCallback = () => {
+  loadCommentList(true);
 };
 
 onMounted(() => {
-  mitter.on("postCommentSuccess", (comment) => {
-    if (comment.pCommentId === 0) {
-      dataSource.value.list.unshift(comment);
-      if (!dataSource.value.totalCount) {
-        dataSource.value.totalCount = 1;
-      } else {
-        dataSource.value.totalCount++;
-      }
-      return;
-    } else {
-      //二级回复
-      const curComment = dataSource.value.list.find((item) => {
-        return item.commentId == comment.pCommentId;
-      });
-      if (!curComment) {
-        return;
-      }
-      if (!curComment.children) {
-        curComment.children = [];
-      }
-      curComment.children.push(comment);
-    }
-  });
-
-  //删除评论
-  mitter.on("delCommentCallback", ({pCommentId, commentId}) => {
-    if (pCommentId == 0) {
-      dataSource.value.list = dataSource.value.list.filter((item) => {
-        return item.commentId != commentId;
-      });
-      dataSource.value.totalCount--;
-    } else {
-      const pComment = dataSource.value.list.find((item) => {
-        return item.commentId == pCommentId;
-      });
-      pComment.children = pComment.children.filter((item) => {
-        return item.commentId != commentId;
-      });
-    }
-  });
-
-  //置顶
-  mitter.on("topCommentCallback", () => {
-    loadCommentList();
-  });
+  loadCommentList(true);
+  mitter.on("windowScroll", handleWindowScroll);
+  mitter.on("postCommentSuccess", handlePostCommentSuccess);
+  mitter.on("delCommentCallback", handleDelCommentCallback);
+  mitter.on("topCommentCallback", handleTopCommentCallback);
 });
 
 onUnmounted(() => {
-  mitter.off("postCommentSuccess");
-  mitter.off("delCommentCallback");
-  mitter.off('topCommentCallback')
+  mitter.off("windowScroll", handleWindowScroll);
+  mitter.off("postCommentSuccess", handlePostCommentSuccess);
+  mitter.off("delCommentCallback", handleDelCommentCallback);
+  mitter.off("topCommentCallback", handleTopCommentCallback);
 });
 </script>
 
@@ -231,5 +335,25 @@ onUnmounted(() => {
       padding-bottom: 20px;
     }
   }
+}
+
+.bottom-loading {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+
+  img {
+    width: 20px;
+    margin-right: 10px;
+  }
+}
+
+.reach-bottom,
+.comment-closed {
+  text-align: center;
+  line-height: 40px;
+  color: var(--text3);
 }
 </style>

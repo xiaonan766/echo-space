@@ -60,22 +60,62 @@ func (VideoComment) TableName() string {
 }
 
 type WebCommentItem struct {
-	CommentID     int    `json:"commentId"`
-	PCommentID    int    `json:"pCommentId"`
-	VideoID       string `json:"videoId"`
-	VideoUserID   string `json:"videoUserId"`
-	UserID        string `json:"userId"`
-	Avatar        string `json:"avatar"`
-	NickName      string `json:"nickName"`
-	ReplyUserID   string `json:"replyUserId"`
-	ReplyAvatar   string `json:"replyAvatar"`
-	ReplyNickName string `json:"replyNickName"`
-	Content       string `json:"content"`
-	ImgPath       string `json:"imgPath"`
-	PostTime      string `json:"postTime"`
-	TopType       int    `json:"topType"`
-	LikeCount     int    `json:"likeCount"`
-	HateCount     int    `json:"hateCount"`
+	CommentID     int              `gorm:"column:comment_id" json:"commentId"`
+	PCommentID    int              `gorm:"column:p_comment_id" json:"pCommentId"`
+	VideoID       string           `gorm:"column:video_id" json:"videoId"`
+	VideoUserID   string           `gorm:"column:video_user_id" json:"videoUserId"`
+	UserID        string           `gorm:"column:user_id" json:"userId"`
+	Avatar        string           `gorm:"column:avatar" json:"avatar"`
+	NickName      string           `gorm:"column:nick_name" json:"nickName"`
+	ReplyUserID   string           `gorm:"column:reply_user_id" json:"replyUserId"`
+	ReplyAvatar   string           `gorm:"column:reply_avatar" json:"replyAvatar"`
+	ReplyNickName string           `gorm:"column:reply_nick_name" json:"replyNickName"`
+	Content       string           `gorm:"column:content" json:"content"`
+	ImgPath       string           `gorm:"column:img_path" json:"imgPath"`
+	PostTime      string           `gorm:"column:post_time" json:"postTime"`
+	TopType       int              `gorm:"column:top_type" json:"topType"`
+	LikeCount     int              `gorm:"column:like_count" json:"likeCount"`
+	HateCount     int              `gorm:"column:hate_count" json:"hateCount"`
+	ReplyCount    int              `gorm:"-" json:"replyCount"`
+	Children      []WebCommentItem `gorm:"-" json:"children"`
+}
+
+type CommentCursorPage struct {
+	TotalCount int64            `json:"totalCount"`
+	PageSize   int              `json:"pageSize"`
+	List       []WebCommentItem `json:"list"`
+	NextCursor string           `json:"nextCursor"`
+	HasMore    bool             `json:"hasMore"`
+}
+
+type UserActionItem struct {
+	ActionID    int    `gorm:"column:action_id" json:"actionId"`
+	VideoID     string `gorm:"column:video_id" json:"videoId"`
+	CommentID   int    `gorm:"column:comment_id" json:"commentId"`
+	ActionType  int    `gorm:"column:action_type" json:"actionType"`
+	ActionCount int    `gorm:"column:action_count" json:"actionCount"`
+	UserID      string `gorm:"column:user_id" json:"userId"`
+	ActionTime  string `gorm:"column:action_time" json:"actionTime"`
+}
+
+type UserAction struct {
+	ActionID    int       `gorm:"column:action_id;primaryKey;autoIncrement" json:"actionId"`
+	VideoID     string    `gorm:"column:video_id" json:"videoId"`
+	VideoUserID string    `gorm:"column:video_user_id" json:"videoUserId"`
+	CommentID   int       `gorm:"column:comment_id" json:"commentId"`
+	ActionType  int       `gorm:"column:action_type" json:"actionType"`
+	ActionCount int       `gorm:"column:action_count" json:"actionCount"`
+	UserID      string    `gorm:"column:user_id" json:"userId"`
+	ActionTime  time.Time `gorm:"column:action_time" json:"actionTime"`
+}
+
+func (UserAction) TableName() string {
+	return "user_action"
+}
+
+type UserActionVideoTarget struct {
+	VideoID string `gorm:"column:video_id"`
+	UserID  string `gorm:"column:user_id"`
 }
 
 type CommentTargetInfo struct {

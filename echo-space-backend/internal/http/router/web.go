@@ -15,6 +15,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	userRepository := repository.NewUserRepository(deps.DB)
 	accountService := webservice.NewAccountService(deps.Cache, userRepository)
 	accountHandler := webhandler.NewAccountHandler(accountService)
+	uhomeService := webservice.NewUhomeService(userRepository)
+	uhomeHandler := webhandler.NewUhomeHandler(uhomeService)
 	uploadingFileStore := cache.NewUploadingFileStore(deps.Redis)
 	sysSettingStore := cache.NewSysSettingStore(deps.Cache, "echo-space:sys_setting")
 	videoUploadService := webservice.NewVideoUploadService(uploadingFileStore, sysSettingStore, deps.Config.File.ResourceRoot)
@@ -37,7 +39,9 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	danmuService := webservice.NewDanmuService(interactRepository, sysSettingStore, danmuLimiter)
 	danmuHandler := webhandler.NewDanmuHandler(danmuService)
 	commentService := webservice.NewCommentService(interactRepository, deps.Config.CommentReview)
-	commentHandler := webhandler.NewCommentHandler(commentService)
+	commentHandler := webhandler.NewCommentHandler(commentService, accountService)
+	userActionService := webservice.NewUserActionService(interactRepository)
+	userActionHandler := webhandler.NewUserActionHandler(userActionService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
 	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
@@ -58,6 +62,9 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	accountGroup.GET("/getUserCountInfo", middleware.WebAuth(accountService), accountHandler.GetUserCountInfo)
 	accountGroup.POST("/getUserCountInfo", middleware.WebAuth(accountService), accountHandler.GetUserCountInfo)
 	accountGroup.POST("/logout", middleware.WebAuth(accountService), accountHandler.Logout)
+
+	uhomeGroup := group.Group("/uhome", middleware.WebAuth(accountService))
+	uhomeGroup.POST("/focus", uhomeHandler.Focus)
 
 	ucenterGroup := group.Group("/ucenter", middleware.WebAuth(accountService))
 	ucenterGroup.POST("/postVideo", videoPostHandler.PostVideo)
@@ -94,8 +101,14 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	danmuGroup.POST("/loadDanmu", danmuHandler.LoadDanmu)
 	danmuGroup.POST("/postDanmu", middleware.WebAuth(accountService), danmuHandler.PostDanmu)
 
-	commentGroup := interactGroup.Group("/comment", middleware.WebAuth(accountService))
+	commentGroup := interactGroup.Group("/comment")
+	commentGroup.GET("/loadComment", commentHandler.LoadComment)
+	commentGroup.POST("/loadComment", commentHandler.LoadComment)
+	commentGroup.Use(middleware.WebAuth(accountService))
 	commentGroup.POST("/postComment", commentHandler.PostComment)
+
+	userActionGroup := interactGroup.Group("/userAction", middleware.WebAuth(accountService))
+	userActionGroup.POST("/doAction", userActionHandler.DoAction)
 
 	shopGroup := group.Group("/shop")
 	shopGroup.GET("/loadRecommend", shopHandler.LoadRecommend)

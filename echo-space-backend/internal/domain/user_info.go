@@ -25,3 +25,13 @@ type UserInfo struct {
 func (UserInfo) TableName() string {
 	return "user_info"
 }
+
+type UserFocus struct {
+	UserID      string    `gorm:"column:user_id;type:varchar(10);primaryKey" json:"userId"`
+	FocusUserID string    `gorm:"column:focus_user_id;type:varchar(10);primaryKey" json:"focusUserId"`
+	FocusTime   time.Time `gorm:"column:focus_time" json:"focusTime"`
+}
+
+func (UserFocus) TableName() string {
+	return "user_focus"
+}

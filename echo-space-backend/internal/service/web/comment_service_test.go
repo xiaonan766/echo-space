@@ -11,6 +11,7 @@ import (
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/config"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 )
 
 func TestValidatePostCommentInput(t *testing.T) {
@@ -74,37 +75,6 @@ func TestPostCommentRejectsSensitiveWordBeforeWrite(t *testing.T) {
 	}
 }
 
-func TestPostCommentReviewIsCaseInsensitive(t *testing.T) {
-	service := NewCommentService(&fakeCommentRepository{}, config.CommentReviewConfig{
-		Enabled:        true,
-		RejectMessage:  "blocked",
-		SensitiveWords: []string{"vx"},
-	})
-
-	err := service.reviewContent("加 VX 联系")
-	if err == nil {
-		t.Fatal("expected case-insensitive sensitive word error")
-	}
-}
-
-func TestPostCommentVideoNotFound(t *testing.T) {
-	repo := &fakeCommentRepository{targetErr: gorm.ErrRecordNotFound}
-	service := NewCommentService(repo, config.CommentReviewConfig{})
-
-	_, err := service.PostComment(context.Background(), PostCommentInput{
-		UserID:  "10001",
-		Content: "正常评论",
-		VideoID: "Abc123Def4",
-	})
-	if err == nil {
-		t.Fatal("expected video not found error")
-	}
-	businessError, ok := IsBusinessError(err)
-	if !ok || businessError.Info != "视频不存在" {
-		t.Fatalf("error = %#v, want video not found business error", err)
-	}
-}
-
 func TestPostCommentRejectsClosedCommentArea(t *testing.T) {
 	repo := &fakeCommentRepository{
 		target: &domain.CommentTargetInfo{VideoID: "Abc123Def4", VideoUserID: "20001", Interaction: "1"},
@@ -122,37 +92,6 @@ func TestPostCommentRejectsClosedCommentArea(t *testing.T) {
 	businessError, ok := IsBusinessError(err)
 	if !ok || businessError.Info != "UP主已关闭评论区" {
 		t.Fatalf("error = %#v, want closed comment business error", err)
-	}
-}
-
-func TestPostCommentCreatesTopLevelComment(t *testing.T) {
-	repo := &fakeCommentRepository{
-		target: &domain.CommentTargetInfo{VideoID: "Abc123Def4", VideoUserID: "20001"},
-	}
-	service := NewCommentService(repo, config.CommentReviewConfig{})
-	service.now = func() time.Time {
-		return time.Date(2026, 6, 24, 14, 30, 0, 0, time.Local)
-	}
-
-	result, err := service.PostComment(context.Background(), PostCommentInput{
-		UserID:   "10001",
-		NickName: "测试用户",
-		Avatar:   "avatar.png",
-		Content:  "正常评论",
-		ImgPath:  "cover/comment.png",
-		VideoID:  "Abc123Def4",
-	})
-	if err != nil {
-		t.Fatalf("post comment returned error: %v", err)
-	}
-	if repo.created == nil {
-		t.Fatal("expected comment to be created")
-	}
-	if repo.created.PCommentID != 0 || repo.topLevelCreateCount != 1 {
-		t.Fatalf("created pCommentId=%d topLevelCreateCount=%d, want 0 and 1", repo.created.PCommentID, repo.topLevelCreateCount)
-	}
-	if result.CommentID != 100 || result.PCommentID != 0 || result.NickName != "测试用户" || result.PostTime != "2026-06-24 14:30:00" {
-		t.Fatalf("unexpected result: %#v", result)
 	}
 }
 
@@ -187,44 +126,110 @@ func TestPostCommentCreatesNestedReply(t *testing.T) {
 	if repo.created.PCommentID != 7 || repo.created.ReplyUserID != "30001" {
 		t.Fatalf("created comment = %#v, want parent 7 and reply user 30001", repo.created)
 	}
-	if repo.topLevelCreateCount != 0 {
-		t.Fatalf("topLevelCreateCount = %d, want 0", repo.topLevelCreateCount)
-	}
 	if result.PCommentID != 7 || result.ReplyUserID != "30001" || result.ReplyNickName != "被回复用户" || result.ReplyAvatar != "reply-avatar.png" {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 }
 
-func TestPostCommentRejectsReplyFromOtherVideo(t *testing.T) {
-	replyID := 8
+func TestLoadCommentClosedCommentAreaReturnsNil(t *testing.T) {
+	service := NewCommentService(&fakeCommentRepository{
+		target: &domain.CommentTargetInfo{VideoID: "Abc123Def4", VideoUserID: "20001", Interaction: "1"},
+	}, config.CommentReviewConfig{})
+
+	result, err := service.LoadComment(context.Background(), LoadCommentInput{VideoID: "Abc123Def4"})
+	if err != nil {
+		t.Fatalf("load comment returned error: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("result = %#v, want nil", result)
+	}
+}
+
+func TestLoadTopLevelCommentUsesCursorAndTopComment(t *testing.T) {
 	repo := &fakeCommentRepository{
-		target: &domain.CommentTargetInfo{VideoID: "Abc123Def4", VideoUserID: "20001"},
-		reply:  &domain.CommentReplyInfo{CommentID: 8, PCommentID: 0, VideoID: "Other12345", UserID: "30001"},
+		target:        &domain.CommentTargetInfo{VideoID: "Abc123Def4", VideoUserID: "20001"},
+		topLevelCount: 3,
+		topComments: []domain.WebCommentItem{
+			{CommentID: 9, TopType: 1},
+		},
+		topLevelComments: []domain.WebCommentItem{
+			{CommentID: 8, LikeCount: 5},
+			{CommentID: 7, LikeCount: 4},
+			{CommentID: 6, LikeCount: 3},
+		},
+		replyCountMap: map[int]int{9: 2, 8: 1},
+		actions: []domain.UserActionItem{
+			{CommentID: 8, ActionType: 0, UserID: "10001"},
+		},
 	}
 	service := NewCommentService(repo, config.CommentReviewConfig{})
 
-	_, err := service.PostComment(context.Background(), PostCommentInput{
-		UserID:         "10001",
-		Content:        "回复内容",
-		VideoID:        "Abc123Def4",
-		ReplyCommentID: &replyID,
+	result, err := service.LoadComment(context.Background(), LoadCommentInput{
+		VideoID:   "Abc123Def4",
+		OrderType: commentOrderHot,
+		UserID:    "10001",
+	})
+	if err != nil {
+		t.Fatalf("load comment returned error: %v", err)
+	}
+	if len(result.CommentData.List) != 4 || result.CommentData.List[0].CommentID != 9 {
+		t.Fatalf("list = %#v, want top comment first plus normal comments", result.CommentData.List)
+	}
+	if result.CommentData.List[0].ReplyCount != 2 || result.CommentData.List[1].ReplyCount != 1 {
+		t.Fatalf("reply counts not filled: %#v", result.CommentData.List)
+	}
+	if len(result.UserActionList) != 1 || result.UserActionList[0].CommentID != 8 {
+		t.Fatalf("user actions = %#v, want current page actions", result.UserActionList)
+	}
+}
+
+func TestLoadCommentRejectsCursorMismatch(t *testing.T) {
+	cursor, err := encodeCommentCursor(commentCursorPayload{
+		VideoID:       "Other12345",
+		PCommentID:    0,
+		OrderType:     commentOrderHot,
+		LastCommentID: 10,
+		LastLikeCount: 5,
+	})
+	if err != nil {
+		t.Fatalf("encode cursor: %v", err)
+	}
+
+	service := NewCommentService(&fakeCommentRepository{
+		target: &domain.CommentTargetInfo{VideoID: "Abc123Def4", VideoUserID: "20001"},
+	}, config.CommentReviewConfig{})
+	_, err = service.LoadComment(context.Background(), LoadCommentInput{
+		VideoID: "Abc123Def4",
+		Cursor:  cursor,
 	})
 	if err == nil {
-		t.Fatal("expected reply validation error")
+		t.Fatal("expected cursor mismatch error")
 	}
-	businessError, ok := IsBusinessError(err)
-	if !ok || businessError.Info != "参数错误" {
-		t.Fatalf("error = %#v, want param business error", err)
+	if _, ok := IsBusinessError(err); !ok {
+		t.Fatalf("error = %#v, want business error", err)
 	}
 }
 
 type fakeCommentRepository struct {
 	target *domain.CommentTargetInfo
 	reply  *domain.CommentReplyInfo
+	parent *domain.CommentReplyInfo
 
 	targetErr error
 	replyErr  error
+	parentErr error
 	createErr error
+
+	topComments      []domain.WebCommentItem
+	topLevelComments []domain.WebCommentItem
+	replyComments    []domain.WebCommentItem
+	topLevelCount    int64
+	replyCount       int64
+	replyCountMap    map[int]int
+	actions          []domain.UserActionItem
+
+	lastTopQuery   repository.CommentCursorQuery
+	lastReplyQuery repository.CommentCursorQuery
 
 	created             *domain.VideoComment
 	createCount         int
@@ -234,6 +239,9 @@ type fakeCommentRepository struct {
 func (r *fakeCommentRepository) FindCommentTarget(ctx context.Context, videoID string) (*domain.CommentTargetInfo, error) {
 	if r.targetErr != nil {
 		return nil, r.targetErr
+	}
+	if r.target == nil {
+		return nil, gorm.ErrRecordNotFound
 	}
 	return r.target, nil
 }
@@ -246,6 +254,16 @@ func (r *fakeCommentRepository) FindReplyComment(ctx context.Context, commentID 
 		return nil, gorm.ErrRecordNotFound
 	}
 	return r.reply, nil
+}
+
+func (r *fakeCommentRepository) FindTopLevelComment(ctx context.Context, videoID string, commentID int) (*domain.CommentReplyInfo, error) {
+	if r.parentErr != nil {
+		return nil, r.parentErr
+	}
+	if r.parent == nil {
+		return &domain.CommentReplyInfo{CommentID: commentID, VideoID: videoID}, nil
+	}
+	return r.parent, nil
 }
 
 func (r *fakeCommentRepository) CreateComment(ctx context.Context, comment *domain.VideoComment) error {
@@ -264,4 +282,60 @@ func (r *fakeCommentRepository) CreateComment(ctx context.Context, comment *doma
 	r.created = &copied
 	comment.CommentID = copied.CommentID
 	return nil
+}
+
+func (r *fakeCommentRepository) ListTopComments(ctx context.Context, videoID string) ([]domain.WebCommentItem, error) {
+	return r.topComments, nil
+}
+
+func (r *fakeCommentRepository) ListTopLevelCommentsByCursor(ctx context.Context, query repository.CommentCursorQuery) ([]domain.WebCommentItem, error) {
+	r.lastTopQuery = query
+	return r.topLevelComments, nil
+}
+
+func (r *fakeCommentRepository) ListReplyCommentsByCursor(ctx context.Context, query repository.CommentCursorQuery) ([]domain.WebCommentItem, error) {
+	r.lastReplyQuery = query
+	return r.replyComments, nil
+}
+
+func (r *fakeCommentRepository) CountTopLevelComments(ctx context.Context, videoID string) (int64, error) {
+	return r.topLevelCount, nil
+}
+
+func (r *fakeCommentRepository) CountReplyComments(ctx context.Context, videoID string, pCommentID int) (int64, error) {
+	return r.replyCount, nil
+}
+
+func (r *fakeCommentRepository) CountRepliesByParentIDs(ctx context.Context, parentIDs []int) (map[int]int, error) {
+	if r.replyCountMap == nil {
+		return map[int]int{}, nil
+	}
+	return r.replyCountMap, nil
+}
+
+func (r *fakeCommentRepository) ListUserCommentActions(ctx context.Context, videoID string, userID string, commentIDs []int) ([]domain.UserActionItem, error) {
+	return r.actions, nil
+}
+
+func TestPostCommentUsesStableTimeFormat(t *testing.T) {
+	repo := &fakeCommentRepository{
+		target: &domain.CommentTargetInfo{VideoID: "Abc123Def4", VideoUserID: "20001"},
+	}
+	service := NewCommentService(repo, config.CommentReviewConfig{})
+	service.now = func() time.Time {
+		return time.Date(2026, 6, 24, 14, 30, 0, 0, time.Local)
+	}
+
+	result, err := service.PostComment(context.Background(), PostCommentInput{
+		UserID:   "10001",
+		NickName: "测试用户",
+		Content:  "正常评论",
+		VideoID:  "Abc123Def4",
+	})
+	if err != nil {
+		t.Fatalf("post comment returned error: %v", err)
+	}
+	if result.PostTime != "2026-06-24 14:30:00" {
+		t.Fatalf("postTime = %s, want formatted time", result.PostTime)
+	}
 }

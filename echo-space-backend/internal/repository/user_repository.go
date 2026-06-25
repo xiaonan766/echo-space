@@ -93,6 +93,21 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.UserInfo) erro
 	return r.db.WithContext(ctx).Create(user).Error
 }
 
+func (r *UserRepository) FindFocus(ctx context.Context, userID string, focusUserID string) (*domain.UserFocus, error) {
+	var focus domain.UserFocus
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND focus_user_id = ?", userID, focusUserID).
+		First(&focus).Error
+	if err != nil {
+		return nil, err
+	}
+	return &focus, nil
+}
+
+func (r *UserRepository) CreateFocus(ctx context.Context, focus *domain.UserFocus) error {
+	return r.db.WithContext(ctx).Create(focus).Error
+}
+
 func (r *UserRepository) UpdateStatus(ctx context.Context, userID string, status int) (int64, error) {
 	result := r.db.WithContext(ctx).
 		Model(&domain.UserInfo{}).
