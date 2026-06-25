@@ -62,6 +62,10 @@ const router = createRouter({
           name: 'message',
           component: () => import('@/views/message/UserMessage.vue'),
         }, {
+          path: '/dynamic',
+          name: 'dynamic',
+          component: () => import('@/views/dynamic/Dynamic.vue'),
+        }, {
           path: '/search',
           name: 'search',
           component: () => import('@/views/search/Search.vue'),

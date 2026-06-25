@@ -35,3 +35,25 @@ type UserFocus struct {
 func (UserFocus) TableName() string {
 	return "user_focus"
 }
+
+type UserVideoCountInfo struct {
+	PlayCount int `gorm:"column:play_count" json:"playCount"`
+	LikeCount int `gorm:"column:like_count" json:"likeCount"`
+}
+
+type UserHomeInfo struct {
+	UserID             string `json:"userId"`
+	NickName           string `json:"nickName"`
+	Sex                int    `json:"sex"`
+	Birthday           string `json:"birthday"`
+	School             string `json:"school"`
+	PersonIntroduction string `json:"personIntroduction"`
+	NoticeInfo         string `json:"noticeInfo"`
+	Theme              int    `json:"theme"`
+	Avatar             string `json:"avatar"`
+	PlayCount          int    `json:"playCount"`
+	LikeCount          int    `json:"likeCount"`
+	FansCount          int    `json:"fansCount"`
+	FocusCount         int    `json:"focusCount"`
+	HaveFocus          bool   `json:"haveFocus"`
+}

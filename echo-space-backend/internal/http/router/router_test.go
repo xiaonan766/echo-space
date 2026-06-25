@@ -216,6 +216,74 @@ func TestWebUhomeFocusRouteRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestWebDynamicLoadFollowUsersRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/dynamic/loadFollowUsers", nil)
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
+func TestWebDynamicLoadFeedRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/dynamic/loadFeed", strings.NewReader("pageSize=10"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
+func TestWebUhomeGetUserInfoRouteDoesNotRequireLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/uhome/getUserInfo", strings.NewReader("userId=bad"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code == response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want non-login response", result.Code)
+	}
+	if result.Code != response.CodeBusinessFail {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeBusinessFail)
+	}
+}
+
 func TestAdminAuditVideoRouteRequiresLogin(t *testing.T) {
 	cfg := config.Config{}
 	cfg.Server.Mode = "test"

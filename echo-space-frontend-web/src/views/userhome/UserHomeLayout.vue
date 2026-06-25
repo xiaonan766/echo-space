@@ -50,7 +50,7 @@
             {{ userInfo.personIntroduction }}
           </div>
         </div>
-        <div class="focus-panel" v-if="!myself">
+        <div class="focus-panel" v-if="!myself && currentUserId">
           <div
             class="btn-focus btn-cancel-focus"
             @click="cancelFocusUser(currentUserId)"
@@ -229,6 +229,10 @@ const focusUser = async (focusUserId, changeCountType = 0, fn) => {
     loginStore.setLogin(true);
     return;
   }
+  if (!focusUserId) {
+    proxy.Message.warning("用户信息加载中，请稍后再试");
+    return;
+  }
   let result = await proxy.Request({
     url: proxy.Api.uHomeFocus,
     showLoading: true,
@@ -250,6 +254,10 @@ const focusUser = async (focusUserId, changeCountType = 0, fn) => {
   }
 };
 const cancelFocusUser = async (focusUserId, changeCountType = 0, fn) => {
+  if (!focusUserId) {
+    proxy.Message.warning("用户信息加载中，请稍后再试");
+    return;
+  }
   let result = await proxy.Request({
     url: proxy.Api.uHomeCancelFocus,
     showLoading: true,

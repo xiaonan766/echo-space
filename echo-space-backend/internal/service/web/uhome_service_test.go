@@ -77,6 +77,70 @@ func TestFocusUserCreatesFocus(t *testing.T) {
 	}
 }
 
+func TestGetUserInfoReturnsAnonymousUserHomeInfo(t *testing.T) {
+	repo := &fakeUhomeRepository{
+		user: &domain.UserInfo{
+			UserID:      "1000000002",
+			NickName:    "UP主",
+			Sex:         1,
+			PersonIntro: "简介",
+			NoticeInfo:  "公告",
+			Theme:       2,
+			Avatar:      "avatar.png",
+		},
+		videoCountInfo: domain.UserVideoCountInfo{PlayCount: 30, LikeCount: 7},
+		fansCount:      12,
+		focusCount:     5,
+		focusErr:       gorm.ErrRecordNotFound,
+	}
+	service := NewUhomeService(repo)
+
+	result, err := service.GetUserInfo(context.Background(), "", "1000000002")
+	if err != nil {
+		t.Fatalf("get user info returned error: %v", err)
+	}
+	if result.UserID != "1000000002" || result.NickName != "UP主" {
+		t.Fatalf("result = %#v, want target user info", result)
+	}
+	if result.PlayCount != 30 || result.LikeCount != 7 || result.FansCount != 12 || result.FocusCount != 5 {
+		t.Fatalf("count info = %#v, want aggregated counts", result)
+	}
+	if result.HaveFocus {
+		t.Fatal("haveFocus = true, want false for anonymous user")
+	}
+}
+
+func TestGetUserInfoMarksFocusedUser(t *testing.T) {
+	repo := &fakeUhomeRepository{
+		user:  &domain.UserInfo{UserID: "1000000002", NickName: "UP主"},
+		focus: &domain.UserFocus{UserID: "1000000001", FocusUserID: "1000000002"},
+	}
+	service := NewUhomeService(repo)
+
+	result, err := service.GetUserInfo(context.Background(), "1000000001", "1000000002")
+	if err != nil {
+		t.Fatalf("get user info returned error: %v", err)
+	}
+	if !result.HaveFocus {
+		t.Fatal("haveFocus = false, want true")
+	}
+}
+
+func TestGetUserInfoReturnsNotFoundWhenUserMissing(t *testing.T) {
+	repo := &fakeUhomeRepository{
+		userErr: gorm.ErrRecordNotFound,
+	}
+	service := NewUhomeService(repo)
+
+	_, err := service.GetUserInfo(context.Background(), "", "1000000002")
+	if err == nil {
+		t.Fatal("expected missing user error")
+	}
+	if _, ok := IsNotFoundError(err); !ok {
+		t.Fatalf("error = %#v, want not found error", err)
+	}
+}
+
 type fakeUhomeRepository struct {
 	user  *domain.UserInfo
 	focus *domain.UserFocus
@@ -84,6 +148,13 @@ type fakeUhomeRepository struct {
 	userErr   error
 	focusErr  error
 	createErr error
+
+	videoCountInfo domain.UserVideoCountInfo
+	fansCount      int64
+	focusCount     int64
+	videoCountErr  error
+	fansCountErr   error
+	focusCountErr  error
 
 	created     *domain.UserFocus
 	createCount int
@@ -117,4 +188,25 @@ func (r *fakeUhomeRepository) CreateFocus(ctx context.Context, focus *domain.Use
 	copied := *focus
 	r.created = &copied
 	return nil
+}
+
+func (r *fakeUhomeRepository) CountFocus(ctx context.Context, userID string) (int64, error) {
+	if r.focusCountErr != nil {
+		return 0, r.focusCountErr
+	}
+	return r.focusCount, nil
+}
+
+func (r *fakeUhomeRepository) CountFans(ctx context.Context, userID string) (int64, error) {
+	if r.fansCountErr != nil {
+		return 0, r.fansCountErr
+	}
+	return r.fansCount, nil
+}
+
+func (r *fakeUhomeRepository) SumUserVideoCount(ctx context.Context, userID string) (domain.UserVideoCountInfo, error) {
+	if r.videoCountErr != nil {
+		return domain.UserVideoCountInfo{}, r.videoCountErr
+	}
+	return r.videoCountInfo, nil
 }

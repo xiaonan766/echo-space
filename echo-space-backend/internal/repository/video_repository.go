@@ -133,6 +133,35 @@ func (r *VideoRepository) FindWebVideoByID(ctx context.Context, videoID string) 
 	return &video, nil
 }
 
+func (r *VideoRepository) ListUserVideoActions(ctx context.Context, videoID string, userID string) ([]domain.UserActionItem, error) {
+	if userID == "" {
+		return []domain.UserActionItem{}, nil
+	}
+
+	var actions []domain.UserActionItem
+	err := r.db.WithContext(ctx).
+		Table("user_action").
+		Select(`
+			action_id,
+			video_id,
+			comment_id,
+			action_type,
+			action_count,
+			user_id,
+			COALESCE(DATE_FORMAT(action_time, '%Y-%m-%d %H:%i:%s'), '') AS action_time
+		`).
+		Where("video_id = ? AND user_id = ? AND comment_id = ? AND action_type IN ?", videoID, userID, 0, []int{2, 3, 4}).
+		Order("action_id desc").
+		Scan(&actions).Error
+	if err != nil {
+		return nil, err
+	}
+	if actions == nil {
+		actions = []domain.UserActionItem{}
+	}
+	return actions, nil
+}
+
 func (r *VideoRepository) ListWebVideoByPage(ctx context.Context, query WebVideoListQuery) ([]domain.WebVideoItem, int64, error) {
 	baseQuery := r.applyWebVideoListFilter(r.db.WithContext(ctx).Table("video_info vi"), query)
 

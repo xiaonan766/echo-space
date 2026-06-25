@@ -88,6 +88,6 @@ type DownloadVideoFile struct {
 }
 
 type WebVideoDetail struct {
-	VideoInfo      WebVideoItem  `json:"videoInfo"`
-	UserActionList []interface{} `json:"userActionList"`
+	VideoInfo      WebVideoItem     `json:"videoInfo"`
+	UserActionList []UserActionItem `json:"userActionList"`
 }

@@ -65,6 +65,10 @@ const Api = {
     //获取所有列表
     uHomeSeriesLoadVideoSeriesWithVideo: server_web + "/uhome/series/loadVideoSeriesWithVideo",
 
+    //动态
+    loadDynamicFollowUsers: server_web + "/dynamic/loadFollowUsers",
+    loadDynamicFeed: server_web + "/dynamic/loadFeed",
+
     //设置主题
     saveTheme: server_web + "/uhome/saveTheme",
     //搜索

@@ -30,7 +30,7 @@
               target="_blank"
               >访问主页</router-link
             >
-            <div class="focus-btn">
+            <div class="focus-btn" v-if="userInfo.userId">
               <el-dropdown v-if="userInfo.haveFocus">
                 <el-button class="btn" type="info" :style="{ width: '100%' }"
                   ><span class="iconfont icon-list"></span>已关注
@@ -131,6 +131,10 @@ const getUserInfo = async (userId) => {
 const focusUser = async (changeCount) => {
   if (Object.keys(loginStore.userInfo).length == 0) {
     loginStore.setLogin(true);
+    return;
+  }
+  if (!userInfo.value.userId) {
+    proxy.Message.warning("用户信息加载中，请稍后再试");
     return;
   }
   let result = await proxy.Request({

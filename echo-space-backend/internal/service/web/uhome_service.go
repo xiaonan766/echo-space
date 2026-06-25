@@ -17,6 +17,9 @@ type UhomeRepository interface {
 	FindByUserID(ctx context.Context, userID string) (*domain.UserInfo, error)
 	FindFocus(ctx context.Context, userID string, focusUserID string) (*domain.UserFocus, error)
 	CreateFocus(ctx context.Context, focus *domain.UserFocus) error
+	CountFocus(ctx context.Context, userID string) (int64, error)
+	CountFans(ctx context.Context, userID string) (int64, error)
+	SumUserVideoCount(ctx context.Context, userID string) (domain.UserVideoCountInfo, error)
 }
 
 type UhomeService struct {
@@ -60,6 +63,65 @@ func (s *UhomeService) FocusUser(ctx context.Context, userID string, focusUserID
 		FocusUserID: focusUserID,
 		FocusTime:   s.currentTime(),
 	})
+}
+
+func (s *UhomeService) GetUserInfo(ctx context.Context, currentUserID string, userID string) (*domain.UserHomeInfo, error) {
+	currentUserID = strings.TrimSpace(currentUserID)
+	userID = strings.TrimSpace(userID)
+	if !validWebUserID(userID) || (currentUserID != "" && !validWebUserID(currentUserID)) {
+		return nil, &BusinessError{Info: "参数错误"}
+	}
+	if s == nil || s.repository == nil {
+		return nil, errors.New("uhome service is not ready")
+	}
+
+	userInfo, err := s.repository.FindByUserID(ctx, userID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, &NotFoundError{Info: "用户不存在"}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	videoCountInfo, err := s.repository.SumUserVideoCount(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	fansCount, err := s.repository.CountFans(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	focusCount, err := s.repository.CountFocus(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	haveFocus := false
+	if currentUserID != "" {
+		_, err := s.repository.FindFocus(ctx, currentUserID, userID)
+		if err == nil {
+			haveFocus = true
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
+
+	return &domain.UserHomeInfo{
+		UserID:             userInfo.UserID,
+		NickName:           userInfo.NickName,
+		Sex:                userInfo.Sex,
+		Birthday:           userInfo.Birthday,
+		School:             userInfo.School,
+		PersonIntroduction: userInfo.PersonIntro,
+		NoticeInfo:         userInfo.NoticeInfo,
+		Theme:              userInfo.Theme,
+		Avatar:             userInfo.Avatar,
+		PlayCount:          videoCountInfo.PlayCount,
+		LikeCount:          videoCountInfo.LikeCount,
+		FansCount:          int(fansCount),
+		FocusCount:         int(focusCount),
+		HaveFocus:          haveFocus,
+	}, nil
 }
 
 func (s *UhomeService) currentTime() time.Time {

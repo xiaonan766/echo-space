@@ -144,6 +144,16 @@ func (r *UserRepository) CountFans(ctx context.Context, userID string) (int64, e
 	return count, err
 }
 
+func (r *UserRepository) SumUserVideoCount(ctx context.Context, userID string) (domain.UserVideoCountInfo, error) {
+	var countInfo domain.UserVideoCountInfo
+	err := r.db.WithContext(ctx).
+		Table("video_info").
+		Select("COALESCE(SUM(play_count), 0) AS play_count, COALESCE(SUM(like_count), 0) AS like_count").
+		Where("user_id = ?", userID).
+		Scan(&countInfo).Error
+	return countInfo, err
+}
+
 func (r *UserRepository) applyListQuery(db *gorm.DB, query UserListQuery) *gorm.DB {
 	if query.NickNameFuzzy != "" {
 		db = db.Where("nick_name LIKE ?", "%"+query.NickNameFuzzy+"%")

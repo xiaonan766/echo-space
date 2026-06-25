@@ -145,6 +145,15 @@
         </el-badge>
         <div>消息</div>
       </div>
+      <div class="user-panel-item" @click="navJump('/dynamic')">
+        <div class="windmill-icon" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div>动态</div>
+      </div>
 
       <div
         class="user-panel-item"
@@ -546,6 +555,49 @@ const logout = () => {
         font-size: 20px;
         font-weight: normal;
       }
+      .windmill-icon {
+        width: 20px;
+        height: 20px;
+        position: relative;
+        margin: 0px auto;
+        color: currentColor;
+        transform-origin: center;
+        &::before {
+          content: '';
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: currentColor;
+          position: absolute;
+          left: 7.5px;
+          top: 7.5px;
+          z-index: 2;
+        }
+        span {
+          width: 3px;
+          height: 9px;
+          border-radius: 3px 3px 1px 1px;
+          background: currentColor;
+          position: absolute;
+          left: 8.5px;
+          top: 1px;
+          transform-origin: 1.5px 9px;
+        }
+        span:nth-child(2) {
+          transform: rotate(90deg);
+        }
+        span:nth-child(3) {
+          transform: rotate(180deg);
+        }
+        span:nth-child(4) {
+          transform: rotate(270deg);
+        }
+      }
+      &:hover {
+        .windmill-icon {
+          animation: windmill-rotate 0.8s linear infinite;
+        }
+      }
     }
     .btn-upload {
       margin-left: 10px;
@@ -612,6 +664,15 @@ const logout = () => {
         flex: 1;
       }
     }
+  }
+}
+
+@keyframes windmill-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

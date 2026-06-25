@@ -66,8 +66,9 @@ func (s *VideoService) LoadRecommendVideo(ctx context.Context) ([]domain.WebVide
 	return list, nil
 }
 
-func (s *VideoService) GetVideoInfo(ctx context.Context, videoID string) (domain.WebVideoDetail, error) {
+func (s *VideoService) GetVideoInfo(ctx context.Context, videoID string, userID string) (domain.WebVideoDetail, error) {
 	videoID = strings.TrimSpace(videoID)
+	userID = strings.TrimSpace(userID)
 	if len(videoID) != 10 || !isValidPublicVideoID(videoID) {
 		return domain.WebVideoDetail{}, &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
 	}
@@ -82,9 +83,14 @@ func (s *VideoService) GetVideoInfo(ctx context.Context, videoID string) (domain
 	videoList := []domain.WebVideoItem{*videoInfo}
 	fillWebVideoPlayTime(videoList)
 
+	userActionList, err := s.videoRepository.ListUserVideoActions(ctx, videoID, userID)
+	if err != nil {
+		return domain.WebVideoDetail{}, err
+	}
+
 	return domain.WebVideoDetail{
 		VideoInfo:      videoList[0],
-		UserActionList: []interface{}{},
+		UserActionList: userActionList,
 	}, nil
 }
 

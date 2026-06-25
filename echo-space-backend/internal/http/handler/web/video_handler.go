@@ -10,11 +10,16 @@ import (
 )
 
 type VideoHandler struct {
-	videoService *webservice.VideoService
+	videoService   *webservice.VideoService
+	accountService *webservice.AccountService
 }
 
-func NewVideoHandler(videoService *webservice.VideoService) *VideoHandler {
-	return &VideoHandler{videoService: videoService}
+func NewVideoHandler(videoService *webservice.VideoService, accountService ...*webservice.AccountService) *VideoHandler {
+	handler := &VideoHandler{videoService: videoService}
+	if len(accountService) > 0 {
+		handler.accountService = accountService[0]
+	}
+	return handler
 }
 
 func (h *VideoHandler) LoadVideo(c *gin.Context) {
@@ -45,7 +50,14 @@ func (h *VideoHandler) LoadRecommendVideo(c *gin.Context) {
 }
 
 func (h *VideoHandler) GetVideoInfo(c *gin.Context) {
-	result, err := h.videoService.GetVideoInfo(c.Request.Context(), formOrQuery(c, "videoId"))
+	userID, err := h.optionalUserID(c)
+	if err != nil {
+		log.Printf("web get video info token: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+
+	result, err := h.videoService.GetVideoInfo(c.Request.Context(), formOrQuery(c, "videoId"), userID)
 	if err != nil {
 		if businessError, ok := webservice.IsBusinessError(err); ok {
 			response.BusinessError(c, businessError.Info, nil)
@@ -57,6 +69,26 @@ func (h *VideoHandler) GetVideoInfo(c *gin.Context) {
 	}
 
 	response.Success(c, result)
+}
+
+func (h *VideoHandler) optionalUserID(c *gin.Context) (string, error) {
+	if h.accountService == nil {
+		return "", nil
+	}
+
+	token := getOptionalWebToken(c)
+	if token == "" {
+		return "", nil
+	}
+
+	tokenUserInfo, ok, err := h.accountService.GetTokenUserInfo(c.Request.Context(), token)
+	if err != nil {
+		return "", err
+	}
+	if !ok || tokenUserInfo == nil {
+		return "", nil
+	}
+	return tokenUserInfo.UserID, nil
 }
 
 func (h *VideoHandler) LoadVideoPList(c *gin.Context) {
