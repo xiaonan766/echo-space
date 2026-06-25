@@ -24,6 +24,38 @@ func NewDynamicRepository(db *gorm.DB) *DynamicRepository {
 	return &DynamicRepository{db: db}
 }
 
+func (r *DynamicRepository) FindCurrentUserInfo(ctx context.Context, userID string) (*domain.DynamicCurrentUserInfo, error) {
+	var info domain.DynamicCurrentUserInfo
+	err := r.db.WithContext(ctx).
+		Table("user_info ui").
+		Select(`
+			ui.user_id,
+			COALESCE(ui.nick_name, '') AS nick_name,
+			COALESCE(ui.avatar, '') AS avatar,
+			(
+				SELECT COUNT(*)
+				FROM user_focus uf
+				WHERE uf.user_id = ui.user_id
+			) AS focus_count,
+			(
+				SELECT COUNT(*)
+				FROM user_focus uf
+				WHERE uf.focus_user_id = ui.user_id
+			) AS fans_count,
+			(
+				SELECT COUNT(*)
+				FROM video_info vi
+				WHERE vi.user_id = ui.user_id
+			) AS dynamic_count
+		`).
+		Where("ui.user_id = ?", userID).
+		Take(&info).Error
+	if err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
 func (r *DynamicRepository) ListFollowUsers(ctx context.Context, userID string) ([]domain.DynamicFollowUserItem, error) {
 	var list []domain.DynamicFollowUserItem
 	err := r.db.WithContext(ctx).

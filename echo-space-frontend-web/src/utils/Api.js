@@ -66,6 +66,7 @@ const Api = {
     uHomeSeriesLoadVideoSeriesWithVideo: server_web + "/uhome/series/loadVideoSeriesWithVideo",
 
     //动态
+    loadDynamicCurrentUserInfo: server_web + "/dynamic/loadCurrentUserInfo",
     loadDynamicFollowUsers: server_web + "/dynamic/loadFollowUsers",
     loadDynamicFeed: server_web + "/dynamic/loadFeed",
 

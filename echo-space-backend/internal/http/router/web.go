@@ -72,6 +72,7 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	uhomeGroup.POST("/focus", middleware.WebAuth(accountService), uhomeHandler.Focus)
 
 	dynamicGroup := group.Group("/dynamic", middleware.WebAuth(accountService))
+	dynamicGroup.POST("/loadCurrentUserInfo", dynamicHandler.LoadCurrentUserInfo)
 	dynamicGroup.POST("/loadFollowUsers", dynamicHandler.LoadFollowUsers)
 	dynamicGroup.POST("/loadFeed", dynamicHandler.LoadFeed)
 

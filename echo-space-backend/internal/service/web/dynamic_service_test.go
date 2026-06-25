@@ -25,6 +25,27 @@ func TestLoadDynamicFollowUsersReturnsEmptyList(t *testing.T) {
 	}
 }
 
+func TestLoadDynamicCurrentUserInfo(t *testing.T) {
+	repo := &fakeDynamicRepository{
+		currentUserInfo: &domain.DynamicCurrentUserInfo{
+			UserID:       "1000000001",
+			NickName:     "tester",
+			FocusCount:   3,
+			FansCount:    2,
+			DynamicCount: 5,
+		},
+	}
+	service := NewDynamicService(repo)
+
+	result, err := service.LoadCurrentUserInfo(context.Background(), "1000000001")
+	if err != nil {
+		t.Fatalf("load current user info returned error: %v", err)
+	}
+	if result.DynamicCount != 5 {
+		t.Fatalf("dynamic count = %d, want 5", result.DynamicCount)
+	}
+}
+
 func TestLoadDynamicFeedBuildsNextCursor(t *testing.T) {
 	repo := &fakeDynamicRepository{
 		feed: []domain.WebVideoItem{
@@ -122,9 +143,14 @@ func TestLoadDynamicFeedRejectsCursorMismatch(t *testing.T) {
 }
 
 type fakeDynamicRepository struct {
-	followUsers []domain.DynamicFollowUserItem
-	feed        []domain.WebVideoItem
-	lastQuery   repository.DynamicFeedQuery
+	currentUserInfo *domain.DynamicCurrentUserInfo
+	followUsers     []domain.DynamicFollowUserItem
+	feed            []domain.WebVideoItem
+	lastQuery       repository.DynamicFeedQuery
+}
+
+func (r *fakeDynamicRepository) FindCurrentUserInfo(ctx context.Context, userID string) (*domain.DynamicCurrentUserInfo, error) {
+	return r.currentUserInfo, nil
 }
 
 func (r *fakeDynamicRepository) ListFollowUsers(ctx context.Context, userID string) ([]domain.DynamicFollowUserItem, error) {

@@ -17,6 +17,21 @@ func NewDynamicHandler(dynamicService *webservice.DynamicService) *DynamicHandle
 	return &DynamicHandler{dynamicService: dynamicService}
 }
 
+func (h *DynamicHandler) LoadCurrentUserInfo(c *gin.Context) {
+	tokenUserInfo, ok := getWebTokenUserInfo(c)
+	if !ok {
+		response.LoginTimeout(c)
+		return
+	}
+
+	result, err := h.dynamicService.LoadCurrentUserInfo(c.Request.Context(), tokenUserInfo.UserID)
+	if err != nil {
+		handleDynamicError(c, "web dynamic load current user info", err)
+		return
+	}
+	response.Success(c, result)
+}
+
 func (h *DynamicHandler) LoadFollowUsers(c *gin.Context) {
 	tokenUserInfo, ok := getWebTokenUserInfo(c)
 	if !ok {

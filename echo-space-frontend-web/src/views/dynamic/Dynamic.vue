@@ -6,131 +6,180 @@
       <el-button type="primary" @click="handleLogin">立即登录</el-button>
     </div>
 
-    <template v-else>
-      <section class="follow-panel">
-        <div class="panel-title">关注的博主</div>
-        <div class="follow-scroll" v-loading="loadingUsers">
-          <button
-            :class="['follow-item', selectedUserId == '' ? 'active' : '']"
-            type="button"
-            @click="handleSelectUser('')"
-          >
-            <div class="all-avatar">
-              <div class="windmill-mark">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            </div>
-            <span class="follow-name">全部动态</span>
-          </button>
-          <button
-            v-for="item in followUsers"
-            :key="item.userId"
-            :class="['follow-item', selectedUserId == item.userId ? 'active' : '']"
-            type="button"
-            @click="handleSelectUser(item.userId)"
-          >
-            <Cover
-              :source="item.avatar"
-              defaultImg="user.png"
-              borderRadius="50%"
-              :width="52"
-              :scale="1"
-              :lazy="false"
-            ></Cover>
-            <span class="follow-name" :title="item.nickName">{{
-              item.nickName
-            }}</span>
-          </button>
-        </div>
-      </section>
-
-      <section class="feed-panel" v-loading="loadingFeed && feedList.length == 0">
-        <NoData
-          v-if="!loadingFeed && feedList.length == 0"
-          :msg="emptyFeedMsg"
-        ></NoData>
-        <article class="feed-card" v-for="item in feedList" :key="item.videoId">
-          <div class="feed-author">
+    <div v-else class="dynamic-layout">
+      <aside class="dynamic-sidebar">
+        <section class="user-card" v-loading="loadingProfile">
+          <div class="user-basic">
             <Avatar
-              :avatar="item.avatar"
-              :userId="item.userId"
-              :width="46"
+              :avatar="currentUserInfo.avatar || loginStore.userInfo.avatar"
+              :userId="currentUserId"
+              :width="56"
               :lazy="false"
             ></Avatar>
-            <div class="author-info">
+            <div class="user-name" :title="currentUserInfo.nickName">
+              {{ currentUserInfo.nickName || loginStore.userInfo.nickName }}
+            </div>
+          </div>
+          <div class="user-counts">
+            <div class="count-item">
+              <div class="count-value">
+                {{ formatCount(currentUserInfo.focusCount) }}
+              </div>
+              <div class="count-label">关注</div>
+            </div>
+            <div class="count-item">
+              <div class="count-value">
+                {{ formatCount(currentUserInfo.fansCount) }}
+              </div>
+              <div class="count-label">粉丝</div>
+            </div>
+            <div class="count-item">
+              <div class="count-value">
+                {{ formatCount(currentUserInfo.dynamicCount) }}
+              </div>
+              <div class="count-label">动态</div>
+            </div>
+          </div>
+        </section>
+        <section class="fixed-image-box"></section>
+      </aside>
+
+      <main class="dynamic-main">
+        <section class="follow-panel">
+          <div class="panel-title">关注的博主</div>
+          <div class="follow-scroll" v-loading="loadingUsers">
+            <button
+              :class="['follow-item', selectedUserId == '' ? 'active' : '']"
+              type="button"
+              @click="handleSelectUser('')"
+            >
+              <div class="all-avatar">
+                <div class="windmill-mark">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+              <span class="follow-name">全部动态</span>
+            </button>
+            <button
+              v-for="item in followUsers"
+              :key="item.userId"
+              :class="[
+                'follow-item',
+                selectedUserId == item.userId ? 'active' : '',
+              ]"
+              type="button"
+              @click="handleSelectUser(item.userId)"
+            >
+              <Cover
+                :source="item.avatar"
+                defaultImg="user.png"
+                borderRadius="50%"
+                :width="52"
+                :scale="1"
+                :lazy="false"
+              ></Cover>
+              <span class="follow-name" :title="item.nickName">{{
+                item.nickName
+              }}</span>
+            </button>
+          </div>
+        </section>
+
+        <section
+          class="feed-panel"
+          v-loading="loadingFeed && feedList.length == 0"
+        >
+          <NoData
+            v-if="!loadingFeed && feedList.length == 0"
+            :msg="emptyFeedMsg"
+          ></NoData>
+          <article
+            class="feed-card"
+            v-for="item in feedList"
+            :key="item.videoId"
+          >
+            <div class="feed-author">
+              <Avatar
+                :avatar="item.avatar"
+                :userId="item.userId"
+                :width="46"
+                :lazy="false"
+              ></Avatar>
+              <div class="author-info">
+                <router-link
+                  class="nick-name"
+                  :to="`/user/${item.userId}`"
+                  target="_blank"
+                >
+                  {{ item.nickName }}
+                </router-link>
+                <div class="publish-time">
+                  {{ formatTime(item.lastUpdateTime) }} 发布了视频
+                </div>
+              </div>
+            </div>
+            <div class="feed-content">
               <router-link
-                class="nick-name"
-                :to="`/user/${item.userId}`"
+                class="video-title"
+                :to="`/video/${item.videoId}`"
                 target="_blank"
               >
-                {{ item.nickName }}
+                {{ item.videoName }}
               </router-link>
-              <div class="publish-time">
-                {{ formatTime(item.lastUpdateTime) }} 发布了视频
+              <div class="video-introduction" v-if="item.introduction">
+                {{ item.introduction }}
               </div>
-            </div>
-          </div>
-          <div class="feed-content">
-            <router-link
-              class="video-title"
-              :to="`/video/${item.videoId}`"
-              target="_blank"
-            >
-              {{ item.videoName }}
-            </router-link>
-            <div class="video-introduction" v-if="item.introduction">
-              {{ item.introduction }}
-            </div>
-            <router-link
-              class="video-card"
-              :to="`/video/${item.videoId}`"
-              target="_blank"
-            >
-              <div class="video-cover">
-                <Cover :source="item.videoCover" fit="cover"></Cover>
-                <div class="play-time">{{ item.playTime }}</div>
-              </div>
-              <div class="video-info">
-                <div class="video-name">{{ item.videoName }}</div>
-                <div class="video-desc">
-                  {{ item.introduction || '这个视频暂时没有简介' }}
+              <router-link
+                class="video-card"
+                :to="`/video/${item.videoId}`"
+                target="_blank"
+              >
+                <div class="video-cover">
+                  <Cover :source="item.videoCover" fit="cover"></Cover>
+                  <div class="play-time">{{ item.playTime }}</div>
                 </div>
-                <div class="video-stats">
-                  <span class="iconfont icon-play2">{{
-                    formatCount(item.playCount)
-                  }}</span>
-                  <span class="iconfont icon-danmu">{{
-                    formatCount(item.danmuCount)
-                  }}</span>
-                  <span class="iconfont icon-comment">{{
-                    formatCount(item.commentCount)
-                  }}</span>
-                  <span class="iconfont icon-like-solid">{{
-                    formatCount(item.likeCount)
-                  }}</span>
+                <div class="video-info">
+                  <div class="video-name">{{ item.videoName }}</div>
+                  <div class="video-desc">
+                    {{ item.introduction || '这个视频暂时没有简介' }}
+                  </div>
+                  <div class="video-stats">
+                    <span class="iconfont icon-play2">{{
+                      formatCount(item.playCount)
+                    }}</span>
+                    <span class="iconfont icon-danmu">{{
+                      formatCount(item.danmuCount)
+                    }}</span>
+                    <span class="iconfont icon-comment">{{
+                      formatCount(item.commentCount)
+                    }}</span>
+                    <span class="iconfont icon-like-solid">{{
+                      formatCount(item.likeCount)
+                    }}</span>
+                  </div>
                 </div>
-              </div>
-            </router-link>
-          </div>
-        </article>
-      </section>
+              </router-link>
+            </div>
+          </article>
+        </section>
 
-      <div class="load-more" v-if="feedList.length > 0">
-        <el-button
-          v-if="hasMore"
-          :loading="loadingFeed"
-          type="primary"
-          plain
-          @click="loadFeed"
-        >
-          加载更多
-        </el-button>
-        <div v-else class="reach-bottom">已经到底啦~~</div>
-      </div>
-    </template>
+        <div class="load-more" v-if="feedList.length > 0">
+          <el-button
+            v-if="hasMore"
+            :loading="loadingFeed"
+            type="primary"
+            plain
+            @click="loadFeed"
+          >
+            加载更多
+          </el-button>
+          <div v-else class="reach-bottom">已经到底啦~~</div>
+        </div>
+      </main>
+    </div>
   </div>
 </template>
 
@@ -143,11 +192,13 @@ const { proxy } = getCurrentInstance()
 const loginStore = useLoginStore()
 const navActionStore = useNavAction()
 
+const currentUserInfo = ref({})
 const followUsers = ref([])
 const feedList = ref([])
 const selectedUserId = ref('')
 const nextCursor = ref('')
 const hasMore = ref(false)
+const loadingProfile = ref(false)
 const loadingUsers = ref(false)
 const loadingFeed = ref(false)
 const hasLoaded = ref(false)
@@ -197,6 +248,7 @@ const initDynamicData = async (force = false) => {
   }
   hasLoaded.value = true
   selectedUserId.value = ''
+  await loadCurrentUserInfo()
   await loadFollowUsers()
   await resetFeed()
 }
@@ -206,12 +258,25 @@ const clearDynamicData = () => {
   selectedUserId.value = ''
   nextCursor.value = ''
   hasMore.value = false
+  currentUserInfo.value = {}
   followUsers.value = []
   feedList.value = []
 }
 
 const handleLogin = () => {
   loginStore.setLogin(true)
+}
+
+const loadCurrentUserInfo = async () => {
+  loadingProfile.value = true
+  const result = await proxy.Request({
+    url: proxy.Api.loadDynamicCurrentUserInfo,
+  })
+  loadingProfile.value = false
+  if (!result) {
+    return
+  }
+  currentUserInfo.value = result.data || {}
 }
 
 const loadFollowUsers = async () => {
@@ -286,12 +351,14 @@ const formatCount = (count) => {
 
 <style lang="scss" scoped>
 .dynamic-page {
-  width: 760px;
+  width: 1040px;
   margin: 20px auto 50px;
   min-height: 520px;
 }
 
 .login-panel {
+  width: 760px;
+  margin: 0px auto;
   background: #fff;
   border-radius: 6px;
   padding: 56px 20px;
@@ -305,6 +372,67 @@ const formatCount = (count) => {
     margin: 12px 0px 24px;
     color: var(--text3);
   }
+}
+
+.dynamic-layout {
+  display: grid;
+  grid-template-columns: 240px 760px;
+  gap: 20px;
+  align-items: start;
+}
+
+.dynamic-sidebar {
+  position: sticky;
+  top: 84px;
+  z-index: 2;
+}
+
+.user-card {
+  background: #fff;
+  border-radius: 6px;
+  padding: 18px;
+  min-height: 150px;
+  .user-basic {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+  .user-name {
+    flex: 1;
+    min-width: 0;
+    margin-left: 12px;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .user-counts {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    text-align: center;
+    .count-value {
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 22px;
+    }
+    .count-label {
+      margin-top: 4px;
+      color: var(--text3);
+      font-size: 13px;
+    }
+  }
+}
+
+.fixed-image-box {
+  margin-top: 12px;
+  height: 170px;
+  background: #fff;
+  border: 1px solid #eef0f2;
+  border-radius: 6px;
 }
 
 .follow-panel,

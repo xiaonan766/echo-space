@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 
+	"gorm.io/gorm"
+
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 )
@@ -17,6 +19,7 @@ const (
 )
 
 type DynamicRepository interface {
+	FindCurrentUserInfo(ctx context.Context, userID string) (*domain.DynamicCurrentUserInfo, error)
 	ListFollowUsers(ctx context.Context, userID string) ([]domain.DynamicFollowUserItem, error)
 	ListFeedByCursor(ctx context.Context, query repository.DynamicFeedQuery) ([]domain.WebVideoItem, error)
 }
@@ -40,6 +43,25 @@ type dynamicCursorPayload struct {
 
 func NewDynamicService(repository DynamicRepository) *DynamicService {
 	return &DynamicService{repository: repository}
+}
+
+func (s *DynamicService) LoadCurrentUserInfo(ctx context.Context, userID string) (*domain.DynamicCurrentUserInfo, error) {
+	userID = strings.TrimSpace(userID)
+	if !validWebUserID(userID) {
+		return nil, &BusinessError{Info: "参数错误"}
+	}
+	if s == nil || s.repository == nil {
+		return nil, errors.New("dynamic service is not ready")
+	}
+
+	info, err := s.repository.FindCurrentUserInfo(ctx, userID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, &BusinessError{Info: "用户不存在"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
 }
 
 func (s *DynamicService) LoadFollowUsers(ctx context.Context, userID string) ([]domain.DynamicFollowUserItem, error) {

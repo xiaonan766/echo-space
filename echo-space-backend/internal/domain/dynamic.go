@@ -8,6 +8,15 @@ type DynamicFollowUserItem struct {
 	FocusTime          string `gorm:"column:focus_time" json:"focusTime"`
 }
 
+type DynamicCurrentUserInfo struct {
+	UserID       string `gorm:"column:user_id" json:"userId"`
+	NickName     string `gorm:"column:nick_name" json:"nickName"`
+	Avatar       string `gorm:"column:avatar" json:"avatar"`
+	FocusCount   int    `gorm:"column:focus_count" json:"focusCount"`
+	FansCount    int    `gorm:"column:fans_count" json:"fansCount"`
+	DynamicCount int    `gorm:"column:dynamic_count" json:"dynamicCount"`
+}
+
 type DynamicFeedPage struct {
 	PageSize   int            `json:"pageSize"`
 	List       []WebVideoItem `json:"list"`
