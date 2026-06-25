@@ -94,11 +94,13 @@ Go 后端服务：http://localhost:7070
 稿件管理页面
 <img width="1917" height="987" alt="image" src="https://github.com/user-attachments/assets/b7e196ad-fe13-42ba-a343-071175275e85" />
 <img width="1919" height="991" alt="image" src="https://github.com/user-attachments/assets/6bb5188a-2060-4be8-9dd8-4e469317c0b0" />
-观看视频页面
-<img width="1915" height="988" alt="image" src="https://github.com/user-attachments/assets/4ff0558f-647c-4e87-93d9-23703d544e6f" />
+观看视频以及互动页面
+<img width="1919" height="983" alt="image" src="https://github.com/user-attachments/assets/ea51ff24-01be-49ed-bb3b-837500888889" />
 评论页面
 <img width="1919" height="984" alt="image" src="https://github.com/user-attachments/assets/0df5952b-5a09-4ed8-a87f-6b66ea8b968c" />
 <img width="1914" height="983" alt="image" src="https://github.com/user-attachments/assets/4fa63ab3-13cd-4daa-8f1a-656d7f1c445a" />
+动态页面
+<img width="1919" height="976" alt="image" src="https://github.com/user-attachments/assets/1dd6b07a-b79b-4e69-bff9-919fbe6975da" />
 
 —— —— —— —— —— —— —— —— —— —— —— —— ——
 
