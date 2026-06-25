@@ -2,11 +2,18 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
+)
+
+var (
+	ErrUpdateUserInfoNotFound         = errors.New("update user info: user not found")
+	ErrUpdateUserInfoInsufficientCoin = errors.New("update user info: insufficient coin")
 )
 
 type UserRepository struct {
@@ -124,6 +131,67 @@ func (r *UserRepository) UpdateLoginInfo(ctx context.Context, userID string, log
 			"last_login_time": loginTime,
 			"last_login_ip":   loginIP,
 		}).Error
+}
+
+func (r *UserRepository) UpdateUserInfo(ctx context.Context, userID string, userInfo domain.UserInfo, spendCoin int) (*domain.UserInfo, error) {
+	var updatedUser domain.UserInfo
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var currentUser domain.UserInfo
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ?", userID).
+			Take(&currentUser).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUpdateUserInfoNotFound
+		}
+		if err != nil {
+			return err
+		}
+
+		if spendCoin > 0 {
+			if currentUser.CurrentCoinCount < spendCoin {
+				return ErrUpdateUserInfoInsufficientCoin
+			}
+			result := tx.Model(&domain.UserInfo{}).
+				Where("user_id = ? AND current_coin_count >= ?", userID, spendCoin).
+				Update("current_coin_count", gorm.Expr("current_coin_count - ?", spendCoin))
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return ErrUpdateUserInfoInsufficientCoin
+			}
+			currentUser.CurrentCoinCount -= spendCoin
+		}
+
+		result := tx.Model(&domain.UserInfo{}).
+			Where("user_id = ?", userID).
+			Updates(map[string]any{
+				"avatar":              userInfo.Avatar,
+				"nick_name":           userInfo.NickName,
+				"sex":                 userInfo.Sex,
+				"birthday":            userInfo.Birthday,
+				"school":              userInfo.School,
+				"person_introduction": userInfo.PersonIntro,
+				"notice_info":         userInfo.NoticeInfo,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+
+		currentUser.Avatar = userInfo.Avatar
+		currentUser.NickName = userInfo.NickName
+		currentUser.Sex = userInfo.Sex
+		currentUser.Birthday = userInfo.Birthday
+		currentUser.School = userInfo.School
+		currentUser.PersonIntro = userInfo.PersonIntro
+		currentUser.NoticeInfo = userInfo.NoticeInfo
+		updatedUser = currentUser
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &updatedUser, nil
 }
 
 func (r *UserRepository) CountFocus(ctx context.Context, userID string) (int64, error) {

@@ -141,13 +141,155 @@ func TestGetUserInfoReturnsNotFoundWhenUserMissing(t *testing.T) {
 	}
 }
 
+func TestUpdateUserInfoRejectsOtherUser(t *testing.T) {
+	repo := &fakeUhomeRepository{}
+	service := NewUhomeService(repo)
+
+	_, err := service.UpdateUserInfo(context.Background(), "1000000001", UpdateUserInfoInput{
+		UserID:   "1000000002",
+		Avatar:   "avatar.png",
+		NickName: "newName",
+		Sex:      1,
+	})
+	if err == nil {
+		t.Fatal("expected other user error")
+	}
+	if _, ok := IsBusinessError(err); !ok {
+		t.Fatalf("error = %#v, want business error", err)
+	}
+	if repo.updateCount != 0 {
+		t.Fatalf("updateCount = %d, want 0", repo.updateCount)
+	}
+}
+
+func TestUpdateUserInfoRejectsInsufficientCoinForNickName(t *testing.T) {
+	repo := &fakeUhomeRepository{
+		user: &domain.UserInfo{
+			UserID:           "1000000001",
+			NickName:         "oldName",
+			CurrentCoinCount: 4,
+		},
+	}
+	service := NewUhomeService(repo)
+
+	_, err := service.UpdateUserInfo(context.Background(), "1000000001", UpdateUserInfoInput{
+		UserID:   "1000000001",
+		Avatar:   "avatar.png",
+		NickName: "newName",
+		Sex:      1,
+	})
+	if err == nil {
+		t.Fatal("expected insufficient coin error")
+	}
+	if _, ok := IsBusinessError(err); !ok {
+		t.Fatalf("error = %#v, want business error", err)
+	}
+	if repo.updateCount != 0 {
+		t.Fatalf("updateCount = %d, want 0", repo.updateCount)
+	}
+}
+
+func TestUpdateUserInfoRejectsDuplicateNickName(t *testing.T) {
+	repo := &fakeUhomeRepository{
+		user: &domain.UserInfo{
+			UserID:           "1000000001",
+			NickName:         "oldName",
+			CurrentCoinCount: 10,
+		},
+		nickNameUser: &domain.UserInfo{
+			UserID:   "1000000002",
+			NickName: "newName",
+		},
+	}
+	service := NewUhomeService(repo)
+
+	_, err := service.UpdateUserInfo(context.Background(), "1000000001", UpdateUserInfoInput{
+		UserID:   "1000000001",
+		Avatar:   "avatar.png",
+		NickName: "newName",
+		Sex:      1,
+	})
+	if err == nil {
+		t.Fatal("expected duplicate nick name error")
+	}
+	if _, ok := IsBusinessError(err); !ok {
+		t.Fatalf("error = %#v, want business error", err)
+	}
+	if repo.updateCount != 0 {
+		t.Fatalf("updateCount = %d, want 0", repo.updateCount)
+	}
+}
+
+func TestUpdateUserInfoChargesCoinWhenNickNameChanges(t *testing.T) {
+	repo := &fakeUhomeRepository{
+		user: &domain.UserInfo{
+			UserID:           "1000000001",
+			NickName:         "oldName",
+			CurrentCoinCount: 10,
+			Theme:            1,
+		},
+		nickNameErr: gorm.ErrRecordNotFound,
+	}
+	service := NewUhomeService(repo)
+
+	result, err := service.UpdateUserInfo(context.Background(), "1000000001", UpdateUserInfoInput{
+		UserID:             "1000000001",
+		Avatar:             "avatar.png",
+		NickName:           "newName",
+		Sex:                2,
+		Birthday:           "2026-06-25",
+		School:             "school",
+		PersonIntroduction: "intro",
+		NoticeInfo:         "notice",
+	})
+	if err != nil {
+		t.Fatalf("update user info returned error: %v", err)
+	}
+	if repo.updateCount != 1 {
+		t.Fatalf("updateCount = %d, want 1", repo.updateCount)
+	}
+	if repo.updateSpendCoin != updateNickNameCoin {
+		t.Fatalf("updateSpendCoin = %d, want %d", repo.updateSpendCoin, updateNickNameCoin)
+	}
+	if result.NickName != "newName" || result.CurrentCoinCount != 5 {
+		t.Fatalf("result = %#v, want changed nick name and charged coin", result)
+	}
+}
+
+func TestUpdateUserInfoDoesNotChargeWhenNickNameUnchanged(t *testing.T) {
+	repo := &fakeUhomeRepository{
+		user: &domain.UserInfo{
+			UserID:           "1000000001",
+			NickName:         "oldName",
+			CurrentCoinCount: 10,
+		},
+	}
+	service := NewUhomeService(repo)
+
+	_, err := service.UpdateUserInfo(context.Background(), "1000000001", UpdateUserInfoInput{
+		UserID:   "1000000001",
+		Avatar:   "avatar.png",
+		NickName: "oldName",
+		Sex:      1,
+	})
+	if err != nil {
+		t.Fatalf("update user info returned error: %v", err)
+	}
+	if repo.updateSpendCoin != 0 {
+		t.Fatalf("updateSpendCoin = %d, want 0", repo.updateSpendCoin)
+	}
+}
+
 type fakeUhomeRepository struct {
 	user  *domain.UserInfo
 	focus *domain.UserFocus
 
-	userErr   error
-	focusErr  error
-	createErr error
+	userErr     error
+	nickNameErr error
+	focusErr    error
+	createErr   error
+
+	nickNameUser *domain.UserInfo
 
 	videoCountInfo domain.UserVideoCountInfo
 	fansCount      int64
@@ -158,6 +300,13 @@ type fakeUhomeRepository struct {
 
 	created     *domain.UserFocus
 	createCount int
+
+	updatedUser     *domain.UserInfo
+	updateInput     domain.UserInfo
+	updateUserID    string
+	updateSpendCoin int
+	updateErr       error
+	updateCount     int
 }
 
 func (r *fakeUhomeRepository) FindByUserID(ctx context.Context, userID string) (*domain.UserInfo, error) {
@@ -168,6 +317,45 @@ func (r *fakeUhomeRepository) FindByUserID(ctx context.Context, userID string) (
 		return nil, errors.New("user not configured")
 	}
 	return r.user, nil
+}
+
+func (r *fakeUhomeRepository) FindByNickName(ctx context.Context, nickName string) (*domain.UserInfo, error) {
+	if r.nickNameErr != nil {
+		return nil, r.nickNameErr
+	}
+	if r.nickNameUser == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return r.nickNameUser, nil
+}
+
+func (r *fakeUhomeRepository) UpdateUserInfo(ctx context.Context, userID string, userInfo domain.UserInfo, spendCoin int) (*domain.UserInfo, error) {
+	if r.updateErr != nil {
+		return nil, r.updateErr
+	}
+
+	r.updateCount++
+	r.updateUserID = userID
+	r.updateInput = userInfo
+	r.updateSpendCoin = spendCoin
+	if r.updatedUser != nil {
+		return r.updatedUser, nil
+	}
+
+	updatedUser := domain.UserInfo{}
+	if r.user != nil {
+		updatedUser = *r.user
+	}
+	updatedUser.UserID = userID
+	updatedUser.Avatar = userInfo.Avatar
+	updatedUser.NickName = userInfo.NickName
+	updatedUser.Sex = userInfo.Sex
+	updatedUser.Birthday = userInfo.Birthday
+	updatedUser.School = userInfo.School
+	updatedUser.PersonIntro = userInfo.PersonIntro
+	updatedUser.NoticeInfo = userInfo.NoticeInfo
+	updatedUser.CurrentCoinCount -= spendCoin
+	return &updatedUser, nil
 }
 
 func (r *fakeUhomeRepository) FindFocus(ctx context.Context, userID string, focusUserID string) (*domain.UserFocus, error) {

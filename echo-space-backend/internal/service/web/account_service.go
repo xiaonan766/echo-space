@@ -296,6 +296,26 @@ func (s *AccountService) GetTokenUserInfo(ctx context.Context, token string) (*T
 	return &info, true, nil
 }
 
+func (s *AccountService) UpdateTokenUserInfo(ctx context.Context, token string, userInfo *domain.UserInfo) error {
+	token = strings.TrimSpace(token)
+	if token == "" || userInfo == nil {
+		return nil
+	}
+
+	info, ok, err := s.GetTokenUserInfo(ctx, token)
+	if err != nil || !ok {
+		return err
+	}
+
+	info.NickName = userInfo.NickName
+	info.Avatar = userInfo.Avatar
+	info.Sex = userInfo.Sex
+	info.Theme = userInfo.Theme
+	info.CurrentCoinCount = userInfo.CurrentCoinCount
+	info.ExpireAt = time.Now().Add(webTokenTTL).UnixMilli()
+	return s.tokenStore.Set(ctx, token, info, webTokenTTL)
+}
+
 func validateRegisterInput(input RegisterInput) error {
 	if input.Email == "" || len(input.Email) > 150 || !emailRegexp.MatchString(input.Email) {
 		return &BusinessError{Info: "\u8bf7\u8f93\u5165\u6b63\u786e\u7684\u90ae\u7bb1"}

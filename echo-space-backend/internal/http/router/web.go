@@ -69,6 +69,7 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	uhomeGroup := group.Group("/uhome")
 	uhomeGroup.GET("/getUserInfo", uhomeHandler.GetUserInfo)
 	uhomeGroup.POST("/getUserInfo", uhomeHandler.GetUserInfo)
+	uhomeGroup.POST("/updateUserInfo", middleware.WebAuth(accountService), uhomeHandler.UpdateUserInfo)
 	uhomeGroup.POST("/focus", middleware.WebAuth(accountService), uhomeHandler.Focus)
 
 	dynamicGroup := group.Group("/dynamic", middleware.WebAuth(accountService))
