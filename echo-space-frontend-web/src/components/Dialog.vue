@@ -5,6 +5,7 @@
     :model-value="show"
     :close-on-click-modal="false"
     :class="['cust-dialog', dialogClass]"
+    :append-to-body="appendToBody"
     :top="top + 'px'"
     :width="width"
     @close="close"
@@ -69,6 +70,10 @@ const props = defineProps({
   dialogClass: {
     type: String,
     default: "",
+  },
+  appendToBody: {
+    type: Boolean,
+    default: false,
   },
   padding: {
     type: Number,
