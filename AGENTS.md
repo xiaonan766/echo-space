@@ -1,9 +1,10 @@
 ﻿# AI 生成代码规范
 
-本规范适用于当前前端工作区 `echo-space-frontend`，包括：
+本规范适用于当前项目 `echo-space`，包括前端和后端工作区。
 
 - `echo-space-frontend-admin`
 - `echo-space-frontend-web`
+- `echo-space-backend`
 
 AI 在本项目中生成、修改或解释代码时，必须优先遵守本文件。
 
@@ -22,6 +23,8 @@ AI 在本项目中生成、修改或解释代码时，必须优先遵守本文�
 
 项目已经存在实际技术栈，必须以现有配置为准。
 
+### 前端技术栈
+
 - 构建工具：Vite
 - 前端框架：Vue 3
 - 组件写法：优先遵循现有 `.vue` 单文件组件和 `<script setup>` 风格
@@ -39,6 +42,27 @@ AI 在本项目中生成、修改或解释代码时，必须优先遵守本文�
 - 不要在当前 JavaScript 项目中擅自引入 TypeScript。
 - 不要替换 Element Plus 为其他 UI 库。
 - 不要绕开现有 `utils`、`router`、`components` 的组织方式重新设计一套体系。
+
+### 后端技术栈
+
+- 语言：Go，版本以 `echo-space-backend/go.mod` 为准。
+- Web 框架：Gin。
+- ORM：GORM。
+- 数据库：MySQL。
+- 缓存：Redis，优先复用 `internal/infra/cache` 下已有封装。
+- 消息队列：RabbitMQ，优先复用 `internal/infra/mq` 下已有连接、发布者和消费者模式。
+- 搜索：Elasticsearch，优先复用 `internal/infra/search` 下已有封装。
+- 配置：优先复用 `internal/config` 和 `configs` 下已有配置结构。
+- 入口：`cmd/api`。
+- HTTP 响应：优先复用 `internal/http/response` 的统一响应结构和状态码。
+
+禁止在没有明确需求的情况下更换或绕开后端现有技术栈，例如：
+
+- 不要把 Gin 换成其他 Web 框架。
+- 不要绕开 GORM 另起一套数据库访问层，除非已有代码本身就是原生 SQL 并且确实更适合。
+- 不要为了小功能新增新的 ORM、缓存库、MQ 库、ES 客户端、日志库或配置库。
+- 不要在业务代码里硬编码数据库连接、Redis 地址、RabbitMQ 地址、文件根目录等环境相关配置。
+- 不要引入自动迁移或擅自修改数据库结构；需要改表时应给出 SQL，由用户确认或手动执行。
 
 ## 编码与中文文本
 
@@ -60,6 +84,15 @@ AI 在本项目中生成、修改或解释代码时，必须优先遵守本文�
 - 新增接口调用前先查看 `src/utils/Api.js` 和 `src/utils/Request.js`。
 - 新增状态管理前先确认是否已有 Pinia store 可复用，且只有跨页面共享状态才放入 store。
 
+后端开发前还必须检查：
+
+- 阅读 `echo-space-backend/go.mod`，确认当前依赖和 Go 版本。
+- 查看 `cmd/api`、`internal/http/router`、`internal/http/handler`、`internal/service`、`internal/repository`、`internal/domain` 的现有组织方式。
+- 新增接口前先查看对应端已有路由注册方式，例如 web/admin 路由是否需要 `WebAuth` 或 `AdminAuth`。
+- 新增业务逻辑前先查看相邻 service/repository 的写法，优先沿用已有输入结构、错误处理和测试风格。
+- 新增数据库访问前先查看 `internal/domain` 是否已有模型，避免重复定义字段含义相同的结构体。
+- 涉及 Redis、RabbitMQ、Elasticsearch、文件上传、视频转码、订单库存等能力时，先查看 `internal/infra` 和已有 service，不要重复造连接池或客户端。
+
 ## 目录与复用规则
 
 - 页面级代码放在 `src/views` 中，遵循现有业务目录组织。
@@ -70,6 +103,18 @@ AI 在本项目中生成、修改或解释代码时，必须优先遵守本文�
 - 新增功能时应尽量复用已有组件、工具函数、请求封装和类型约定。
 - 不要为了一个很小的功能新增多层目录、多层抽象或复杂设计模式。
 
+后端目录与职责：
+
+- `cmd/api` 只负责启动和组装应用，不写具体业务逻辑。
+- `internal/http/router` 只负责路由注册和中间件挂载，不写业务规则。
+- `internal/http/handler` 负责解析请求参数、获取登录用户、调用 service、转换响应，不直接写复杂业务逻辑或数据库操作。
+- `internal/service` 负责业务规则、参数校验、事务边界编排、缓存/MQ 编排。
+- `internal/repository` 负责数据库读写和必要的 SQL/GORM 查询，不处理 HTTP、Cookie、响应码。
+- `internal/domain` 放数据库模型、接口返回 DTO、业务数据结构，字段命名和 json/gorm tag 要清晰一致。
+- `internal/infra` 放基础设施封装，例如数据库、缓存、MQ、搜索、文件能力。
+- `configs` 放配置文件，不把本机私密信息写入代码。
+- `resources` 是运行资源目录，避免把上传图片、视频切片等生成内容提交到 Git。
+
 ## 命名规范
 
 - 命名必须清晰表达业务含义。
@@ -78,6 +123,11 @@ AI 在本项目中生成、修改或解释代码时，必须优先遵守本文�
 - 方法名应说明动作，例如 `loadVideoList`、`handleSubmit`、`resetSearchForm`。
 - 组件名使用清晰的 PascalCase，例如 `VideoUploadDialog.vue`。
 - 布尔值命名优先使用 `is`、`has`、`can`、`show` 等前缀，例如 `isLoading`、`hasMore`、`showDialog`。
+- Go 中导出类型和方法使用清晰的 PascalCase，非导出变量和方法使用 camelCase。
+- 后端业务输入结构优先使用 `XxxInput`，接口返回结构优先使用 `XxxResult`、`XxxItem` 或贴近现有命名。
+- Repository 方法名应表达数据动作，例如 `FindByUserID`、`ListByPage`、`CreateFocus`、`UpdateStatus`。
+- Service 方法名应表达业务动作，例如 `FocusUser`、`LoadComment`、`CreateOrder`。
+- 不要使用 `tmp`、`obj`、`data` 作为长期业务变量名；短小局部变量可以使用 Go 习惯写法，但不能影响可读性。
 
 ## Vue 代码规范
 
@@ -108,6 +158,80 @@ AI 在本项目中生成、修改或解释代码时，必须优先遵守本文�
 - 列表数据、分页数据、表单数据应保持结构清晰，字段命名贴近业务。
 - 不要伪造接口或写无法运行的 mock 逻辑，除非用户明确要求。
 
+后端接口规则：
+
+- web 端接口放在现有 web 路由体系下，admin 端接口放在现有 admin 路由体系下。
+- 登录态接口必须挂对应中间件：web 端用 `WebAuth`，admin 端用 `AdminAuth`。
+- 游客可访问但可选登录的接口，不要强制挂登录中间件；应在 handler 内可选读取 token。
+- 请求参数解析优先复用已有 helper，例如 `formOrQuery`、数字解析函数、token 获取函数。
+- 响应必须使用 `internal/http/response`，不要手写 `c.JSON` 破坏统一格式。
+- 业务错误优先返回 `BusinessError` 并映射为 `600`；未登录返回 `901`；资源不存在需要 404 时沿用项目已有错误处理方式。
+- 不要把数据库错误、Redis 错误、MQ 错误原样返回给前端；日志中记录细节，响应给用户简洁中文提示。
+- 返回给前端的 JSON 字段应使用 lower camelCase，例如 `userId`、`videoId`、`hasMore`。
+- 分页接口应明确分页方式：普通页码分页使用 `pageNo/pageSize`，高并发或易变化列表优先使用游标分页并说明游标含义。
+
+## Go 后端代码规范
+
+- 所有 Go 文件必须通过 `gofmt`。
+- 保持 handler、service、repository 分层清晰，不要在 handler 里直接写 SQL，不要在 repository 里处理 HTTP 响应。
+- 使用 `context.Context` 贯穿数据库、Redis、MQ 等调用，避免无上下文的长时间阻塞。
+- 参数校验放在 service 层为主，handler 可以做基础类型解析和必填判断。
+- 错误处理要显式，不要吞掉错误；确实允许忽略时要能说明原因。
+- 日志应包含操作名称和错误原因，不要打印密码、token、验证码、隐私数据。
+- 对外接口文案使用正常中文，不要新增乱码文案。
+- 避免全局可变状态；必须使用时要考虑并发安全。
+- 不要为了少量代码过度抽象；但跨多个 service 的基础能力应放入已有 infra/cache/mq 等位置复用。
+
+## 数据库与事务规则
+
+- 多表写入、写库后发消息、库存扣减、订单状态流转等必须考虑事务边界。
+- GORM 查询应明确 `Table/Model`、`Where`、`Select`，避免无条件更新或删除。
+- 更新和删除操作必须带明确条件；禁止出现没有 `WHERE` 的危险写操作。
+- 涉及金额、库存、硬币、计数等字段时，要考虑并发和幂等。
+- 库存扣减必须使用条件更新、Redis 原子操作、锁或事务等明确防超卖方案，不能先查后改裸写。
+- 需要新增或修改表结构时，先提供 SQL 和字段说明，不要在代码里偷偷依赖不存在的字段。
+- 不要擅自开启 GORM AutoMigrate 修改生产表结构。
+
+## 缓存、MQ 与并发规则
+
+- Redis key 必须遵循项目已有命名空间，例如 `echo-space:...`。
+- 缓存数据要设置合理 TTL；热点缓存、推荐缓存、库存缓存要说明失效和重建策略。
+- Redis 故障时是否降级必须按业务重要性处理：强一致场景不要悄悄降级为仅本机可见的数据。
+- RabbitMQ 消息应考虑持久化、确认、重试、幂等消费和死信/失败状态。
+- 本地消息表、定时补偿、MQ 重试之间要明确分工，避免重复处理同一环节。
+- 消费者处理订单、库存、转码等任务时，应通过状态机、条件更新或锁避免重复消费造成副作用。
+- Go 协程启动后必须有退出条件或上下文控制；不要制造无法停止的后台循环。
+
+## 搜索与 ES 规则
+
+- Elasticsearch 相关能力优先放在 `internal/infra/search` 或已有搜索封装中，不要在 handler/service 中直接散落 ES 客户端细节。
+- 写入 MySQL 后同步 ES 时，要考虑事务提交后的执行时机；必要时通过 MQ、Outbox 或补偿任务避免数据库成功但 ES 失败导致长期不一致。
+- ES 写入失败不能静默吞掉，必须记录日志并说明是否会重试或降级。
+- 搜索索引字段、文档 ID、更新/删除策略要和业务主键保持清晰对应。
+
+## 文件、上传与视频处理规则
+
+- 上传文件路径必须经过安全拼接和越界校验，禁止信任前端传来的路径。
+- 写入文件时优先使用临时文件再原子替换，避免半文件被读取。
+- 视频分片上传要保证顺序、幂等、大小限制和 Redis 元数据一致性。
+- FFmpeg/ffprobe 调用要处理失败、超时、重试和日志，不能让转码失败静默卡住状态。
+- 生成的视频、图片、临时文件、运行资源不要提交到 Git。
+
+## 后端测试与验证
+
+- 修改后端代码后，优先在 `echo-space-backend` 运行 `go test ./...`。
+- 新增 service 业务规则时，尽量补 service 单元测试。
+- 新增路由或登录要求时，尽量补 router/handler 层测试，至少覆盖是否需要登录。
+- 涉及数据库、Redis、RabbitMQ、文件系统的复杂流程时，说明已验证内容和未验证风险。
+- 如果因为本地环境缺少 MySQL、Redis、RabbitMQ、FFmpeg 等无法真实联调，必须在回复中说明。
+
+## 功能变更文档
+
+- 每次新增或修改功能时，必须同步新增或更新一个 `.md` 文档，记录本次功能的需求背景、实现概要、核心改动文件、接口变化、数据库/缓存/MQ/ES 变化、验证方式和遗留风险。
+- 后端功能文档默认放在 `echo-space-backend/docs/features/`；前端功能文档默认放在对应前端子项目的 `docs/features/`；跨端功能可放在根目录 `docs/features/`。目录不存在时先创建。
+- 文档文件名应能看出日期和功能，例如 `20260629-comment-cursor-pagination.md` 或 `20260629-shop-order-pay.md`。
+- 纯格式化、错别字修复、注释调整、配置说明这类非功能变更，可以不新增功能文档，但必须在最终回复中说明原因。
+
 ## 依赖管理
 
 - 新增依赖前必须先判断现有依赖是否已经能完成需求。
@@ -115,6 +239,7 @@ AI 在本项目中生成、修改或解释代码时，必须优先遵守本文�
 - 确实需要新增依赖时，必须说明原因、用途和替代方案。
 - 不要因为个人偏好引入新的状态库、请求库、日期库、图标库或 UI 库。
 - 不要手动修改 `node_modules`。
+- 后端新增 Go 依赖前也必须判断标准库和现有依赖是否已经能完成；确实需要时说明原因，并让 `go.mod/go.sum` 保持一致。
 
 ## 改动边界
 
@@ -128,6 +253,7 @@ AI 在本项目中生成、修改或解释代码时，必须优先遵守本文�
 
 - 生成的代码必须能在当前项目中落地运行。
 - 修改完成后，优先在受影响子项目中运行 `npm run build` 验证。
+- 修改后端代码后，优先在 `echo-space-backend` 运行 `go test ./...` 验证。
 - 如果没有运行验证，必须说明原因。
 - 不要留下未定义变量、未导入组件、未使用依赖、明显语法错误。
 - 不要提交只有注释、只有 TODO、只有伪代码的实现。
@@ -142,10 +268,10 @@ AI 在本项目中生成、修改或解释代码时，必须优先遵守本文�
 
 ## 推荐工作流程
 
-1. 确认要修改的是 `echo-space-frontend-admin` 还是 `echo-space-frontend-web`。
-2. 阅读对应子项目的配置、入口文件、相关页面、相关组件和工具函数。
+1. 确认要修改的是 `echo-space-frontend-admin`、`echo-space-frontend-web` 还是 `echo-space-backend`。
+2. 阅读对应子项目的配置、入口文件、相关页面/接口、相关组件/service/repository 和工具函数。
 3. 选择最小可行且符合现有风格的实现方案。
 4. 编写可运行代码，优先复用已有能力。
 5. 检查中文文案和编码，避免乱码或问号。
-6. 运行构建或必要验证。
+6. 前端运行 `npm run build`，后端运行 `go test ./...`，或说明无法验证的原因。
 7. 简洁说明改动结果和验证结果。
