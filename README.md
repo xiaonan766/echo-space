@@ -101,6 +101,8 @@ Go 后端服务：http://localhost:7070
 <img width="1914" height="983" alt="image" src="https://github.com/user-attachments/assets/4fa63ab3-13cd-4daa-8f1a-656d7f1c445a" />
 动态页面
 <img width="1919" height="976" alt="image" src="https://github.com/user-attachments/assets/1dd6b07a-b79b-4e69-bff9-919fbe6975da" />
+搜索视频页面
+<img width="1919" height="982" alt="image" src="https://github.com/user-attachments/assets/f6388f5d-1581-4791-aafd-6999e0eb8c18" />
 
 —— —— —— —— —— —— —— —— —— —— —— —— ——
 
