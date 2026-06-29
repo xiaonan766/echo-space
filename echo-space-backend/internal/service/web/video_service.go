@@ -4,24 +4,33 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
+	"log"
 	"strings"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
+	searchinfra "github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/search"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 )
 
 const (
-	defaultVideoPageNo   = 1
-	defaultVideoPageSize = 15
-	maxVideoPageSize     = 50
-	videoNoRecommend     = 0
-	videoRecommend       = 1
+	defaultVideoPageNo     = 1
+	defaultVideoPageSize   = 15
+	defaultSearchPageSize  = 30
+	maxVideoPageSize       = 50
+	maxSearchKeywordLength = 100
+	videoNoRecommend       = 0
+	videoRecommend         = 1
 )
 
 type VideoService struct {
 	videoRepository *repository.VideoRepository
+	videoSearch     *searchinfra.VideoIndex
+	keywordStore    *cache.SearchKeywordStore
 }
 
 type VideoListInput struct {
@@ -31,8 +40,35 @@ type VideoListInput struct {
 	CategoryID  int
 }
 
-func NewVideoService(videoRepository *repository.VideoRepository) *VideoService {
-	return &VideoService{videoRepository: videoRepository}
+type VideoSearchInput struct {
+	Keyword   string
+	OrderType *int
+	PageNo    int
+	PageSize  int
+}
+
+type VideoServiceOption func(*VideoService)
+
+func WithVideoSearch(videoSearch *searchinfra.VideoIndex) VideoServiceOption {
+	return func(service *VideoService) {
+		service.videoSearch = videoSearch
+	}
+}
+
+func WithSearchKeywordStore(keywordStore *cache.SearchKeywordStore) VideoServiceOption {
+	return func(service *VideoService) {
+		service.keywordStore = keywordStore
+	}
+}
+
+func NewVideoService(videoRepository *repository.VideoRepository, options ...VideoServiceOption) *VideoService {
+	service := &VideoService{videoRepository: videoRepository}
+	for _, option := range options {
+		if option != nil {
+			option(service)
+		}
+	}
+	return service
 }
 
 func (s *VideoService) LoadVideo(ctx context.Context, input VideoListInput) (domain.PaginationResult[domain.WebVideoItem], error) {
@@ -64,6 +100,45 @@ func (s *VideoService) LoadRecommendVideo(ctx context.Context) ([]domain.WebVide
 	}
 	fillWebVideoPlayTime(list)
 	return list, nil
+}
+
+func (s *VideoService) SearchVideo(ctx context.Context, input VideoSearchInput) (domain.PaginationResult[domain.WebVideoItem], error) {
+	input = normalizeVideoSearchInput(input)
+	if input.Keyword == "" {
+		return domain.NewPaginationResult([]domain.WebVideoItem{}, 0, input.PageNo, input.PageSize), nil
+	}
+	if utf8.RuneCountInString(input.Keyword) > maxSearchKeywordLength {
+		return domain.PaginationResult[domain.WebVideoItem]{}, &BusinessError{Info: "\u641c\u7d22\u5173\u952e\u8bcd\u4e0d\u80fd\u8d85\u8fc7100\u4e2a\u5b57\u7b26"}
+	}
+	if s == nil || s.videoRepository == nil || s.videoSearch == nil {
+		return domain.PaginationResult[domain.WebVideoItem]{}, errors.New("video search service is not ready")
+	}
+
+	if s.keywordStore != nil {
+		if err := s.keywordStore.Add(ctx, input.Keyword); err != nil {
+			log.Printf("record search keyword failed: %v", err)
+		}
+	}
+
+	searchResult, err := s.videoSearch.Search(ctx, searchinfra.VideoSearchInput{
+		Keyword:   input.Keyword,
+		OrderType: input.OrderType,
+		PageNo:    input.PageNo,
+		PageSize:  input.PageSize,
+		Highlight: true,
+	})
+	if err != nil {
+		return domain.PaginationResult[domain.WebVideoItem]{}, err
+	}
+
+	videoIDs := collectSearchVideoIDs(searchResult.Hits)
+	videoList, err := s.videoRepository.ListWebVideoByIDs(ctx, videoIDs)
+	if err != nil {
+		return domain.PaginationResult[domain.WebVideoItem]{}, err
+	}
+	videoList = reorderSearchVideoList(videoList, searchResult.Hits)
+	fillWebVideoPlayTime(videoList)
+	return domain.NewPaginationResult(videoList, searchResult.TotalCount, input.PageNo, input.PageSize), nil
 }
 
 func (s *VideoService) GetVideoInfo(ctx context.Context, videoID string, userID string) (domain.WebVideoDetail, error) {
@@ -127,6 +202,67 @@ func normalizeVideoListInput(input VideoListInput) VideoListInput {
 		input.CategoryID = 0
 	}
 	return input
+}
+
+func normalizeVideoSearchInput(input VideoSearchInput) VideoSearchInput {
+	input.Keyword = strings.TrimSpace(input.Keyword)
+	if input.PageNo <= 0 {
+		input.PageNo = defaultVideoPageNo
+	}
+	if input.PageSize <= 0 {
+		input.PageSize = defaultSearchPageSize
+	}
+	if input.PageSize > maxVideoPageSize {
+		input.PageSize = maxVideoPageSize
+	}
+	if input.OrderType != nil {
+		orderType := *input.OrderType
+		if _, ok := searchinfra.SearchOrderField(orderType); ok {
+			input.OrderType = &orderType
+		} else {
+			input.OrderType = nil
+		}
+	}
+	return input
+}
+
+func collectSearchVideoIDs(hits []searchinfra.VideoSearchHit) []string {
+	videoIDs := make([]string, 0, len(hits))
+	seen := make(map[string]struct{}, len(hits))
+	for _, hit := range hits {
+		videoID := strings.TrimSpace(hit.VideoID)
+		if videoID == "" {
+			continue
+		}
+		if _, exists := seen[videoID]; exists {
+			continue
+		}
+		seen[videoID] = struct{}{}
+		videoIDs = append(videoIDs, videoID)
+	}
+	return videoIDs
+}
+
+func reorderSearchVideoList(videoList []domain.WebVideoItem, hits []searchinfra.VideoSearchHit) []domain.WebVideoItem {
+	videoMap := make(map[string]domain.WebVideoItem, len(videoList))
+	for _, item := range videoList {
+		item.VideoName = html.EscapeString(item.VideoName)
+		videoMap[item.VideoID] = item
+	}
+
+	result := make([]domain.WebVideoItem, 0, len(videoList))
+	for _, hit := range hits {
+		item, ok := videoMap[hit.VideoID]
+		if !ok {
+			continue
+		}
+		if hit.HighlightName != "" {
+			item.VideoName = hit.HighlightName
+		}
+		result = append(result, item)
+		delete(videoMap, hit.VideoID)
+	}
+	return result
 }
 
 func fillWebVideoPlayTime(list []domain.WebVideoItem) {

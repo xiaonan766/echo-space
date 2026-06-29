@@ -49,6 +49,26 @@ func (h *VideoHandler) LoadRecommendVideo(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *VideoHandler) Search(c *gin.Context) {
+	result, err := h.videoService.SearchVideo(c.Request.Context(), webservice.VideoSearchInput{
+		Keyword:   formOrQuery(c, "keyword"),
+		OrderType: parseOptionalWebInt(formOrQuery(c, "orderType")),
+		PageNo:    parseWebIntWithDefault(formOrQuery(c, "pageNo"), 1),
+		PageSize:  parseWebIntWithDefault(formOrQuery(c, "pageSize"), 30),
+	})
+	if err != nil {
+		if businessError, ok := webservice.IsBusinessError(err); ok {
+			response.BusinessError(c, businessError.Info, nil)
+			return
+		}
+		log.Printf("web search video: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+
+	response.Success(c, result)
+}
+
 func (h *VideoHandler) GetVideoInfo(c *gin.Context) {
 	userID, err := h.optionalUserID(c)
 	if err != nil {

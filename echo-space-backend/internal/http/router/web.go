@@ -30,7 +30,11 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	categoryHandler := webhandler.NewCategoryHandler(categoryService)
 	videoPostService := webservice.NewVideoPostService(videoPostRepository, categoryRepository, uploadingFileStore, sysSettingStore, deps.VideoTranscodePublisher, deps.Config.File.ResourceRoot)
 	videoPostHandler := webhandler.NewVideoPostHandler(videoPostService)
-	videoService := webservice.NewVideoService(videoRepository)
+	videoService := webservice.NewVideoService(
+		videoRepository,
+		webservice.WithVideoSearch(deps.VideoSearch),
+		webservice.WithSearchKeywordStore(deps.SearchKeywordStore),
+	)
 	videoHandler := webhandler.NewVideoHandler(videoService, accountService)
 	dynamicRepository := repository.NewDynamicRepository(deps.DB)
 	dynamicService := webservice.NewDynamicService(dynamicRepository)
@@ -98,6 +102,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	videoGroup.POST("/loadRecommendVideo", videoHandler.LoadRecommendVideo)
 	videoGroup.GET("/loadVideo", videoHandler.LoadVideo)
 	videoGroup.POST("/loadVideo", videoHandler.LoadVideo)
+	videoGroup.GET("/search", videoHandler.Search)
+	videoGroup.POST("/search", videoHandler.Search)
 	videoGroup.GET("/getVideoInfo", videoHandler.GetVideoInfo)
 	videoGroup.POST("/getVideoInfo", videoHandler.GetVideoInfo)
 	videoGroup.GET("/loadVideoPList", videoHandler.LoadVideoPList)

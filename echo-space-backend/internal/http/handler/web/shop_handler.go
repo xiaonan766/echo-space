@@ -85,6 +85,19 @@ func parseWebIntWithDefault(value string, fallback int) int {
 	return parsed
 }
 
+func parseOptionalWebInt(value string) *int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return nil
+	}
+	return &parsed
+}
+
 func parseWebRequiredUint64(value string) (uint64, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {

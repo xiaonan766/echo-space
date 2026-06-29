@@ -419,6 +419,19 @@ func (r *VideoPostRepository) ToggleRecommendVideo(ctx context.Context, videoID 
 	})
 }
 
+func (r *VideoPostRepository) FindVideoSearchDocumentByID(ctx context.Context, videoID string) (*domain.VideoSearchDocument, error) {
+	var document domain.VideoSearchDocument
+	err := r.db.WithContext(ctx).
+		Table("video_info").
+		Select(videoSearchDocumentSelectColumns).
+		Where("video_id = ?", videoID).
+		Take(&document).Error
+	if err != nil {
+		return nil, err
+	}
+	return &document, nil
+}
+
 func (r *VideoPostRepository) UpdatePost(ctx context.Context, data SaveEditedVideoPostData) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var current domain.VideoInfoPost

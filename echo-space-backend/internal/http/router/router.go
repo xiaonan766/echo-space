@@ -11,6 +11,7 @@ import (
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/response"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/mq"
+	searchinfra "github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/search"
 )
 
 type Dependencies struct {
@@ -18,6 +19,8 @@ type Dependencies struct {
 	Redis                   *redis.Client
 	Cache                   *cache.HybridCache
 	DB                      *gorm.DB
+	VideoSearch             *searchinfra.VideoIndex
+	SearchKeywordStore      *cache.SearchKeywordStore
 	StockLockPublisher      *mq.ShopStockLockPublisher
 	VideoTranscodePublisher *mq.VideoTranscodePublisher
 }

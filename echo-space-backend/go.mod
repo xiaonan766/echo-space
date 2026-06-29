@@ -3,6 +3,7 @@ module github.com/xiaonan766/echo-space/echo-space-backend
 go 1.23.3
 
 require (
+	github.com/elastic/go-elasticsearch/v7 v7.17.10
 	github.com/gin-gonic/gin v1.10.1
 	github.com/mojocn/base64Captcha v1.3.8
 	github.com/rabbitmq/amqp091-go v1.11.0

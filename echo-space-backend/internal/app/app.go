@@ -15,6 +15,7 @@ import (
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/database"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/mq"
+	searchinfra "github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/search"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 	webservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/web"
 )
@@ -62,12 +63,16 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	videoTranscodePublisher, videoTranscodeConsumer := setupVideoTranscode(backgroundCtx, cfg, redisClient, mysqlDB, rabbitClient)
 	setupShopOrderRecovery(backgroundCtx, redisClient, mysqlDB, stockLockPublisher)
 	setupShopStockPrewarm(backgroundCtx, redisClient, mysqlDB)
+	videoSearch := setupVideoSearch(ctx, backgroundCtx, cfg, mysqlDB)
+	searchKeywordStore := cache.NewSearchKeywordStore(redisClient)
 
 	router := approuter.New(approuter.Dependencies{
 		Config:                  cfg,
 		Redis:                   redisClient,
 		Cache:                   hybridCache,
 		DB:                      mysqlDB,
+		VideoSearch:             videoSearch,
+		SearchKeywordStore:      searchKeywordStore,
 		StockLockPublisher:      stockLockPublisher,
 		VideoTranscodePublisher: videoTranscodePublisher,
 	})
@@ -214,4 +219,48 @@ func setupShopStockPrewarm(ctx context.Context, redisClient *redis.Client, mysql
 	prewarmService := webservice.NewShopStockPrewarmService(shopRepository, stockStore)
 	prewarmService.Start(ctx)
 	log.Printf("shop stock prewarm task started")
+}
+
+func setupVideoSearch(startupCtx context.Context, backgroundCtx context.Context, cfg config.Config, mysqlDB *gorm.DB) *searchinfra.VideoIndex {
+	videoSearch, err := searchinfra.NewVideoIndex(cfg.Elasticsearch)
+	if err != nil {
+		log.Printf("elasticsearch video search is disabled: %v", err)
+		return nil
+	}
+	if err := videoSearch.EnsureVideoIndex(startupCtx); err != nil {
+		log.Printf("ensure elasticsearch video index failed: %v", err)
+		return videoSearch
+	}
+
+	videoRepository := repository.NewVideoRepository(mysqlDB)
+	go backfillVideoSearchDocuments(backgroundCtx, videoSearch, videoRepository)
+	log.Printf("elasticsearch video search initialized, index=%s", cfg.Elasticsearch.IndexVideoName)
+	return videoSearch
+}
+
+func backfillVideoSearchDocuments(ctx context.Context, videoSearch *searchinfra.VideoIndex, videoRepository *repository.VideoRepository) {
+	const pageSize = 200
+
+	for offset := 0; ; offset += pageSize {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		list, err := videoRepository.ListVideoSearchDocuments(ctx, offset, pageSize)
+		if err != nil {
+			log.Printf("backfill video search documents failed: %v", err)
+			return
+		}
+		if len(list) == 0 {
+			return
+		}
+
+		for _, document := range list {
+			if err := videoSearch.IndexVideo(ctx, document); err != nil {
+				log.Printf("index video search document failed: videoID=%s err=%v", document.VideoID, err)
+			}
+		}
+	}
 }

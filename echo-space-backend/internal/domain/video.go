@@ -77,6 +77,18 @@ type WebVideoItem struct {
 	RecommendType      int    `gorm:"column:recommend_type" json:"recommendType"`
 }
 
+type VideoSearchDocument struct {
+	VideoID      string `gorm:"column:video_id" json:"videoId"`
+	UserID       string `gorm:"column:user_id" json:"userId"`
+	VideoCover   string `gorm:"column:video_cover" json:"videoCover"`
+	VideoName    string `gorm:"column:video_name" json:"videoName"`
+	Tags         string `gorm:"column:tags" json:"tags"`
+	PlayCount    int    `gorm:"column:play_count" json:"playCount"`
+	DanmuCount   int    `gorm:"column:danmu_count" json:"danmuCount"`
+	CollectCount int    `gorm:"column:collect_count" json:"collectCount"`
+	CreateTime   string `gorm:"column:create_time" json:"createTime"`
+}
+
 type DownloadVideoFile struct {
 	FileID             string `gorm:"column:file_id"`
 	FileName           string `gorm:"column:file_name"`

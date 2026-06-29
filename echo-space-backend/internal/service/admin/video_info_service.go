@@ -3,11 +3,13 @@ package admin
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
+	searchinfra "github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/search"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
 )
 
@@ -15,6 +17,7 @@ type VideoInfoService struct {
 	videoPostRepository *repository.VideoPostRepository
 	settingStore        *cache.SysSettingStore
 	downloadGenerator   *VideoDownloadGenerator
+	videoSearch         *searchinfra.VideoIndex
 }
 
 type VideoInfoListInput struct {
@@ -49,6 +52,13 @@ func (s *VideoInfoService) SetDownloadGenerator(downloadGenerator *VideoDownload
 		return
 	}
 	s.downloadGenerator = downloadGenerator
+}
+
+func (s *VideoInfoService) SetVideoSearch(videoSearch *searchinfra.VideoIndex) {
+	if s == nil {
+		return
+	}
+	s.videoSearch = videoSearch
 }
 
 func (s *VideoInfoService) LoadVideoList(ctx context.Context, input VideoInfoListInput) (domain.PaginationResult[domain.AdminVideoPostItem], error) {
@@ -123,8 +133,11 @@ func (s *VideoInfoService) AuditVideo(ctx context.Context, input AuditVideoInput
 	if errors.Is(err, repository.ErrVideoNoPublishableFiles) {
 		return &BusinessError{Info: "\u89c6\u9891\u6587\u4ef6\u4e0d\u5b58\u5728\u6216\u672a\u8f6c\u7801\u5b8c\u6210"}
 	}
-	if err == nil && input.Status == domain.VideoPostStatusApproved && s.downloadGenerator != nil {
-		s.downloadGenerator.GenerateAsync(input.VideoID)
+	if err == nil && input.Status == domain.VideoPostStatusApproved {
+		if s.downloadGenerator != nil {
+			s.downloadGenerator.GenerateAsync(input.VideoID)
+		}
+		s.indexApprovedVideoAsync(input.VideoID)
 	}
 	return err
 }
@@ -140,6 +153,23 @@ func (s *VideoInfoService) RecommendVideo(ctx context.Context, videoID string) e
 		return &BusinessError{Info: "视频不存在"}
 	}
 	return err
+}
+
+func (s *VideoInfoService) indexApprovedVideoAsync(videoID string) {
+	if s == nil || s.videoSearch == nil || s.videoPostRepository == nil {
+		return
+	}
+
+	go func() {
+		document, err := s.videoPostRepository.FindVideoSearchDocumentByID(context.Background(), videoID)
+		if err != nil {
+			log.Printf("load approved video search document failed: videoID=%s err=%v", videoID, err)
+			return
+		}
+		if err := s.videoSearch.IndexVideo(context.Background(), *document); err != nil {
+			log.Printf("index approved video search document failed: videoID=%s err=%v", videoID, err)
+		}
+	}()
 }
 
 func normalizeVideoInfoListInput(input VideoInfoListInput) VideoInfoListInput {

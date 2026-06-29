@@ -16,6 +16,7 @@ type Config struct {
 	Server        ServerConfig        `yaml:"server"`
 	Redis         RedisConfig         `yaml:"redis"`
 	MySQL         MySQLConfig         `yaml:"mysql"`
+	Elasticsearch ElasticsearchConfig `yaml:"elasticsearch"`
 	RabbitMQ      RabbitMQConfig      `yaml:"rabbitmq"`
 	Admin         AdminConfig         `yaml:"admin"`
 	File          FileConfig          `yaml:"file"`
@@ -48,6 +49,13 @@ type MySQLConfig struct {
 	MaxOpenConns    int    `yaml:"maxOpenConns"`
 	ConnMaxLifetime string `yaml:"connMaxLifetime"`
 	AutoMigrate     bool   `yaml:"autoMigrate"`
+}
+
+type ElasticsearchConfig struct {
+	Addresses      []string `yaml:"addresses"`
+	Username       string   `yaml:"username"`
+	Password       string   `yaml:"password"`
+	IndexVideoName string   `yaml:"indexVideoName"`
 }
 
 func (c MySQLConfig) ConnMaxLifetimeDuration() time.Duration {
@@ -120,6 +128,10 @@ func defaultConfig() Config {
 			MaxOpenConns:    20,
 			ConnMaxLifetime: "1h",
 			AutoMigrate:     false,
+		},
+		Elasticsearch: ElasticsearchConfig{
+			Addresses:      []string{"http://localhost:9200"},
+			IndexVideoName: "echo_space_video",
 		},
 		RabbitMQ: RabbitMQConfig{
 			URL:                    "amqp://guest:guest@localhost:5672/",
@@ -202,6 +214,11 @@ func applyEnvOverrides(cfg *Config) {
 	cfg.MySQL.ConnMaxLifetime = envString("MYSQL_CONN_MAX_LIFETIME", cfg.MySQL.ConnMaxLifetime)
 	cfg.MySQL.AutoMigrate = envBool("MYSQL_AUTO_MIGRATE", cfg.MySQL.AutoMigrate)
 
+	cfg.Elasticsearch.Addresses = envStringSlice("ES_ADDRESSES", cfg.Elasticsearch.Addresses)
+	cfg.Elasticsearch.Username = envString("ES_USERNAME", cfg.Elasticsearch.Username)
+	cfg.Elasticsearch.Password = envString("ES_PASSWORD", cfg.Elasticsearch.Password)
+	cfg.Elasticsearch.IndexVideoName = envString("ES_INDEX_VIDEO_NAME", cfg.Elasticsearch.IndexVideoName)
+
 	cfg.RabbitMQ.URL = envString("RABBITMQ_URL", cfg.RabbitMQ.URL)
 	cfg.RabbitMQ.CacheRecoveryQueue = envString("RABBITMQ_CACHE_RECOVERY_QUEUE", cfg.RabbitMQ.CacheRecoveryQueue)
 	cfg.RabbitMQ.StockLockQueue = envString("RABBITMQ_STOCK_LOCK_QUEUE", cfg.RabbitMQ.StockLockQueue)
@@ -223,6 +240,25 @@ func envString(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func envStringSlice(key string, fallback []string) []string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if item := strings.TrimSpace(part); item != "" {
+			result = append(result, item)
+		}
+	}
+	if len(result) == 0 {
+		return fallback
+	}
+	return result
 }
 
 func envInt(key string, fallback int) int {

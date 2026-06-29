@@ -133,6 +133,65 @@ func (r *VideoRepository) FindWebVideoByID(ctx context.Context, videoID string) 
 	return &video, nil
 }
 
+func (r *VideoRepository) ListWebVideoByIDs(ctx context.Context, videoIDs []string) ([]domain.WebVideoItem, error) {
+	if len(videoIDs) == 0 {
+		return []domain.WebVideoItem{}, nil
+	}
+
+	var list []domain.WebVideoItem
+	err := r.db.WithContext(ctx).
+		Table("video_info vi").
+		Select(webVideoSelectColumns).
+		Joins("LEFT JOIN user_info ui ON vi.user_id = ui.user_id").
+		Where("vi.video_id IN ?", videoIDs).
+		Scan(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = []domain.WebVideoItem{}
+	}
+	return list, nil
+}
+
+func (r *VideoRepository) FindVideoSearchDocumentByID(ctx context.Context, videoID string) (*domain.VideoSearchDocument, error) {
+	var document domain.VideoSearchDocument
+	err := r.db.WithContext(ctx).
+		Table("video_info").
+		Select(videoSearchDocumentSelectColumns).
+		Where("video_id = ?", videoID).
+		Take(&document).Error
+	if err != nil {
+		return nil, err
+	}
+	return &document, nil
+}
+
+func (r *VideoRepository) ListVideoSearchDocuments(ctx context.Context, offset int, limit int) ([]domain.VideoSearchDocument, error) {
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+
+	var list []domain.VideoSearchDocument
+	err := r.db.WithContext(ctx).
+		Table("video_info").
+		Select(videoSearchDocumentSelectColumns).
+		Order("create_time asc").
+		Offset(offset).
+		Limit(limit).
+		Scan(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = []domain.VideoSearchDocument{}
+	}
+	return list, nil
+}
+
 func (r *VideoRepository) ListUserVideoActions(ctx context.Context, videoID string, userID string) ([]domain.UserActionItem, error) {
 	if userID == "" {
 		return []domain.UserActionItem{}, nil
@@ -161,6 +220,18 @@ func (r *VideoRepository) ListUserVideoActions(ctx context.Context, videoID stri
 	}
 	return actions, nil
 }
+
+const videoSearchDocumentSelectColumns = `
+	video_id,
+	user_id,
+	COALESCE(video_cover, '') AS video_cover,
+	COALESCE(video_name, '') AS video_name,
+	COALESCE(tags, '') AS tags,
+	COALESCE(play_count, 0) AS play_count,
+	COALESCE(danmu_count, 0) AS danmu_count,
+	COALESCE(collect_count, 0) AS collect_count,
+	DATE_FORMAT(create_time, '%Y-%m-%d %H:%i:%s') AS create_time
+`
 
 func (r *VideoRepository) ListWebVideoByPage(ctx context.Context, query WebVideoListQuery) ([]domain.WebVideoItem, int64, error) {
 	baseQuery := r.applyWebVideoListFilter(r.db.WithContext(ctx).Table("video_info vi"), query)
