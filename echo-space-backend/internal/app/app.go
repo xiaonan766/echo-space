@@ -29,6 +29,7 @@ type App struct {
 	shopCacheRecoveryConsumer *mq.ShopCacheRecoveryConsumer
 	shopStockLockConsumer     *mq.ShopStockLockConsumer
 	videoTranscodeConsumer    *mq.VideoTranscodeConsumer
+	dynamicFeedConsumer       *mq.DynamicFeedConsumer
 	backgroundCancel          context.CancelFunc
 	router                    http.Handler
 }
@@ -61,6 +62,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	shopCacheRecoveryConsumer := setupShopCacheRecovery(backgroundCtx, cfg, hybridCache, redisClient, mysqlDB, rabbitClient)
 	stockLockPublisher, shopStockLockConsumer := setupShopStockLock(backgroundCtx, cfg, redisClient, mysqlDB, rabbitClient)
 	videoTranscodePublisher, videoTranscodeConsumer := setupVideoTranscode(backgroundCtx, cfg, redisClient, mysqlDB, rabbitClient)
+	dynamicFeedConsumer := setupDynamicFeed(backgroundCtx, cfg, redisClient, mysqlDB, rabbitClient)
 	setupShopOrderRecovery(backgroundCtx, redisClient, mysqlDB, stockLockPublisher)
 	setupShopStockPrewarm(backgroundCtx, redisClient, mysqlDB)
 	videoSearch := setupVideoSearch(ctx, backgroundCtx, cfg, mysqlDB)
@@ -86,6 +88,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		shopCacheRecoveryConsumer: shopCacheRecoveryConsumer,
 		shopStockLockConsumer:     shopStockLockConsumer,
 		videoTranscodeConsumer:    videoTranscodeConsumer,
+		dynamicFeedConsumer:       dynamicFeedConsumer,
 		backgroundCancel:          backgroundCancel,
 		router:                    router,
 	}, nil
@@ -104,6 +107,9 @@ func (a *App) Close() {
 	}
 	if a.videoTranscodeConsumer != nil {
 		a.videoTranscodeConsumer.Close()
+	}
+	if a.dynamicFeedConsumer != nil {
+		a.dynamicFeedConsumer.Close()
 	}
 	if a.shopCacheRecoveryConsumer != nil {
 		a.shopCacheRecoveryConsumer.Close()
@@ -159,6 +165,26 @@ func setupVideoTranscode(ctx context.Context, cfg config.Config, redisClient *re
 	service.StartOutboxPublisher(ctx)
 	log.Printf("video transcode consumer started, queue=%s", cfg.RabbitMQ.VideoTranscodeQueue)
 	return publisher, consumer
+}
+
+func setupDynamicFeed(ctx context.Context, cfg config.Config, redisClient *redis.Client, mysqlDB *gorm.DB, rabbitClient *mq.RabbitClient) *mq.DynamicFeedConsumer {
+	if rabbitClient == nil {
+		log.Printf("dynamic feed publisher is disabled because rabbitmq is not configured")
+		return nil
+	}
+
+	repo := repository.NewDynamicRepository(mysqlDB)
+	activeStore := cache.NewDynamicActiveStore(redisClient)
+	publisher := mq.NewDynamicFeedPublisher(rabbitClient, cfg.RabbitMQ.DynamicFeedQueue)
+	service := webservice.NewDynamicFeedService(repo, activeStore, publisher, activeStore)
+	consumer := mq.NewDynamicFeedConsumer(rabbitClient, cfg.RabbitMQ.DynamicFeedQueue, cfg.RabbitMQ.PrefetchCount, service)
+	if err := consumer.Start(ctx); err != nil {
+		log.Printf("start dynamic feed consumer failed: %v", err)
+		return nil
+	}
+	service.StartOutboxPublisher(ctx)
+	log.Printf("dynamic feed consumer started, queue=%s", cfg.RabbitMQ.DynamicFeedQueue)
+	return consumer
 }
 
 func setupShopCacheRecovery(ctx context.Context, cfg config.Config, hybridCache *cache.HybridCache, redisClient *redis.Client, mysqlDB *gorm.DB, rabbitClient *mq.RabbitClient) *mq.ShopCacheRecoveryConsumer {

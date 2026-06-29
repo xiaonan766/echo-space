@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"log"
 	"math/big"
 	"regexp"
 	"strings"
@@ -38,9 +39,10 @@ var (
 )
 
 type AccountService struct {
-	captcha        *base64Captcha.Captcha
-	tokenStore     *cache.TokenStore
-	userRepository *repository.UserRepository
+	captcha            *base64Captcha.Captcha
+	tokenStore         *cache.TokenStore
+	userRepository     *repository.UserRepository
+	dynamicActiveStore *cache.DynamicActiveStore
 }
 
 type CheckCodeResult struct {
@@ -82,7 +84,7 @@ type UserCountInfo struct {
 	CurrentCoinCount int `json:"currentCoinCount"`
 }
 
-func NewAccountService(hybridCache *cache.HybridCache, userRepository *repository.UserRepository) *AccountService {
+func NewAccountService(hybridCache *cache.HybridCache, userRepository *repository.UserRepository, dynamicActiveStore ...*cache.DynamicActiveStore) *AccountService {
 	store := cache.NewCaptchaStore(hybridCache, checkCodeKeyPrefix, checkCodeTTL)
 	driver := base64Captcha.NewDriverMath(
 		42,
@@ -94,11 +96,15 @@ func NewAccountService(hybridCache *cache.HybridCache, userRepository *repositor
 		nil,
 	)
 
-	return &AccountService{
+	service := &AccountService{
 		captcha:        base64Captcha.NewCaptcha(driver, store),
 		tokenStore:     cache.NewTokenStore(hybridCache, webTokenKeyPrefix),
 		userRepository: userRepository,
 	}
+	if len(dynamicActiveStore) > 0 {
+		service.dynamicActiveStore = dynamicActiveStore[0]
+	}
+	return service
 }
 
 func (s *AccountService) GenerateCheckCode() (*CheckCodeResult, error) {
@@ -203,6 +209,7 @@ func (s *AccountService) Login(ctx context.Context, input LoginInput) (*TokenUse
 	if err := s.userRepository.UpdateLoginInfo(ctx, user.UserID, now, input.LoginIP); err != nil {
 		return nil, err
 	}
+	s.markDynamicActive(ctx, user.UserID, now)
 
 	result := &TokenUserInfo{
 		Token:            token,
@@ -245,10 +252,12 @@ func (s *AccountService) AutoLogin(ctx context.Context, token string) (*TokenUse
 	}
 
 	info.Token = token
-	info.ExpireAt = time.Now().Add(webTokenTTL).UnixMilli()
+	now := time.Now()
+	info.ExpireAt = now.Add(webTokenTTL).UnixMilli()
 	if err := s.tokenStore.Set(ctx, token, info, webTokenTTL); err != nil {
 		return nil, err
 	}
+	s.markDynamicActive(ctx, info.UserID, now)
 	return info, nil
 }
 
@@ -314,6 +323,15 @@ func (s *AccountService) UpdateTokenUserInfo(ctx context.Context, token string, 
 	info.CurrentCoinCount = userInfo.CurrentCoinCount
 	info.ExpireAt = time.Now().Add(webTokenTTL).UnixMilli()
 	return s.tokenStore.Set(ctx, token, info, webTokenTTL)
+}
+
+func (s *AccountService) markDynamicActive(ctx context.Context, userID string, activeAt time.Time) {
+	if s == nil || s.dynamicActiveStore == nil {
+		return
+	}
+	if err := s.dynamicActiveStore.MarkActive(ctx, userID, activeAt); err != nil {
+		log.Printf("mark dynamic active user failed: userID=%s err=%v", userID, err)
+	}
 }
 
 func validateRegisterInput(input RegisterInput) error {

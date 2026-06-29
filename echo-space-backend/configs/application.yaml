@@ -28,6 +28,7 @@ rabbitmq:
   cacheRecoveryQueue: "echo-space.shop.cache.recovery"
   stockLockQueue: "echo-space.shop.stock.lock"
   videoTranscodeQueue: "echo-space.video.transcode"
+  dynamicFeedQueue: "echo-space.dynamic.feed"
   videoTranscodePrefetch: 1
   prefetchCount: 20
 

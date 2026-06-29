@@ -2,6 +2,9 @@ package repository
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -391,7 +394,10 @@ func (r *VideoPostRepository) AuditVideo(ctx context.Context, data AuditVideoDat
 		for _, postFile := range postFiles {
 			files = append(files, buildVideoInfoFileFromPost(postFile))
 		}
-		return tx.Create(&files).Error
+		if err := tx.Create(&files).Error; err != nil {
+			return err
+		}
+		return createDynamicEventMessage(tx, post)
 	})
 }
 
@@ -831,4 +837,69 @@ func trimVideoMessageError(err error) string {
 		return message[:500]
 	}
 	return message
+}
+
+func createDynamicEventMessage(tx *gorm.DB, post domain.VideoInfoPost) error {
+	now := time.Now()
+	event := domain.DynamicEvent{
+		EventID:      dynamicEventID(post.VideoID),
+		VideoID:      post.VideoID,
+		AuthorUserID: post.UserID,
+		DynamicTime:  post.LastUpdateTime,
+		EventType:    domain.DynamicEventTypeVideo,
+		CreateTime:   now,
+		UpdateTime:   now,
+	}
+	if err := tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "video_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"author_user_id": event.AuthorUserID,
+			"dynamic_time":   event.DynamicTime,
+			"event_type":     event.EventType,
+			"update_time":    now,
+		}),
+	}).Create(&event).Error; err != nil {
+		return err
+	}
+
+	messageID, err := newDynamicFeedMessageID()
+	if err != nil {
+		return err
+	}
+	message := domain.DynamicFeedMessage{
+		MessageID:    messageID,
+		EventID:      event.EventID,
+		VideoID:      event.VideoID,
+		AuthorUserID: event.AuthorUserID,
+		DynamicTime:  event.DynamicTime,
+		EventType:    event.EventType,
+	}
+	payload, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+
+	return tx.Create(&domain.DynamicFeedMessageRecord{
+		MessageID:     messageID,
+		EventID:       event.EventID,
+		VideoID:       event.VideoID,
+		AuthorUserID:  event.AuthorUserID,
+		MessageStatus: domain.DynamicFeedMessageWaitPublish,
+		Payload:       string(payload),
+		NextRetryTime: &now,
+		CreateTime:    now,
+		UpdateTime:    now,
+	}).Error
+}
+
+func dynamicEventID(videoID string) string {
+	return "video_" + strings.TrimSpace(videoID)
+}
+
+func newDynamicFeedMessageID() (string, error) {
+	buffer := make([]byte, 16)
+	if _, err := rand.Read(buffer); err != nil {
+		return "", err
+	}
+	return "df" + hex.EncodeToString(buffer)[:30], nil
 }

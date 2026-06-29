@@ -13,7 +13,8 @@ import (
 
 func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, interactGroup *gin.RouterGroup, deps Dependencies) {
 	userRepository := repository.NewUserRepository(deps.DB)
-	accountService := webservice.NewAccountService(deps.Cache, userRepository)
+	dynamicActiveStore := cache.NewDynamicActiveStore(deps.Redis)
+	accountService := webservice.NewAccountService(deps.Cache, userRepository, dynamicActiveStore)
 	accountHandler := webhandler.NewAccountHandler(accountService)
 	uhomeService := webservice.NewUhomeService(userRepository)
 	uhomeHandler := webhandler.NewUhomeHandler(uhomeService, accountService)
@@ -37,7 +38,7 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	)
 	videoHandler := webhandler.NewVideoHandler(videoService, accountService)
 	dynamicRepository := repository.NewDynamicRepository(deps.DB)
-	dynamicService := webservice.NewDynamicService(dynamicRepository)
+	dynamicService := webservice.NewDynamicService(dynamicRepository, dynamicActiveStore)
 	dynamicHandler := webhandler.NewDynamicHandler(dynamicService)
 	sysSettingService := webservice.NewSysSettingService(sysSettingStore)
 	sysSettingHandler := webhandler.NewSysSettingHandler(sysSettingService)

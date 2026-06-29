@@ -71,6 +71,7 @@ type RabbitMQConfig struct {
 	CacheRecoveryQueue     string `yaml:"cacheRecoveryQueue"`
 	StockLockQueue         string `yaml:"stockLockQueue"`
 	VideoTranscodeQueue    string `yaml:"videoTranscodeQueue"`
+	DynamicFeedQueue       string `yaml:"dynamicFeedQueue"`
 	VideoTranscodePrefetch int    `yaml:"videoTranscodePrefetch"`
 	PrefetchCount          int    `yaml:"prefetchCount"`
 }
@@ -138,6 +139,7 @@ func defaultConfig() Config {
 			CacheRecoveryQueue:     "echo-space.shop.cache.recovery",
 			StockLockQueue:         "echo-space.shop.stock.lock",
 			VideoTranscodeQueue:    "echo-space.video.transcode",
+			DynamicFeedQueue:       "echo-space.dynamic.feed",
 			VideoTranscodePrefetch: 1,
 			PrefetchCount:          20,
 		},
@@ -223,6 +225,7 @@ func applyEnvOverrides(cfg *Config) {
 	cfg.RabbitMQ.CacheRecoveryQueue = envString("RABBITMQ_CACHE_RECOVERY_QUEUE", cfg.RabbitMQ.CacheRecoveryQueue)
 	cfg.RabbitMQ.StockLockQueue = envString("RABBITMQ_STOCK_LOCK_QUEUE", cfg.RabbitMQ.StockLockQueue)
 	cfg.RabbitMQ.VideoTranscodeQueue = envString("RABBITMQ_VIDEO_TRANSCODE_QUEUE", cfg.RabbitMQ.VideoTranscodeQueue)
+	cfg.RabbitMQ.DynamicFeedQueue = envString("RABBITMQ_DYNAMIC_FEED_QUEUE", cfg.RabbitMQ.DynamicFeedQueue)
 	cfg.RabbitMQ.VideoTranscodePrefetch = envInt("RABBITMQ_VIDEO_TRANSCODE_PREFETCH", cfg.RabbitMQ.VideoTranscodePrefetch)
 	cfg.RabbitMQ.PrefetchCount = envInt("RABBITMQ_PREFETCH_COUNT", cfg.RabbitMQ.PrefetchCount)
 
