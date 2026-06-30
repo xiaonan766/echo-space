@@ -11,9 +11,13 @@ const (
 	OrderStatusTimeout      = 5
 
 	PayStatusUnpaid = 0
+	PayStatusPaid   = 1
 
 	StockFlowTypeLock   = 1
 	StockFlowTypeUnlock = 2
+	StockFlowTypeSold   = 3
+
+	ShopCoinFlowTypePay = 1
 
 	OrderMessageTypeStockLock = 1
 
@@ -83,6 +87,22 @@ func (ShopStockFlow) TableName() string {
 	return "shop_stock_flow"
 }
 
+type ShopCoinFlow struct {
+	FlowID     uint64    `gorm:"primaryKey;autoIncrement;column:flow_id" json:"flowId"`
+	UserID     string    `gorm:"column:user_id;type:varchar(10);not null" json:"userId"`
+	OrderNo    string    `gorm:"column:order_no;type:varchar(32);not null" json:"orderNo"`
+	ChangeType int       `gorm:"column:change_type;type:tinyint;not null" json:"changeType"`
+	ChangeCoin int       `gorm:"column:change_coin;not null" json:"changeCoin"`
+	BeforeCoin int       `gorm:"column:before_coin;not null" json:"beforeCoin"`
+	AfterCoin  int       `gorm:"column:after_coin;not null" json:"afterCoin"`
+	Remark     string    `gorm:"column:remark;type:varchar(255)" json:"remark"`
+	CreateTime time.Time `gorm:"column:create_time;autoCreateTime" json:"createTime"`
+}
+
+func (ShopCoinFlow) TableName() string {
+	return "shop_coin_flow"
+}
+
 type ShopOrderMessage struct {
 	MessageID     uint64     `gorm:"primaryKey;autoIncrement;column:message_id" json:"messageId"`
 	OrderNo       string     `gorm:"column:order_no;type:varchar(32);not null" json:"orderNo"`
@@ -101,24 +121,25 @@ func (ShopOrderMessage) TableName() string {
 }
 
 type WebShopOrderItem struct {
-	OrderID         uint64  `gorm:"column:order_id" json:"orderId"`
-	OrderNo         string  `gorm:"column:order_no" json:"orderNo"`
-	UserID          string  `gorm:"column:user_id" json:"userId"`
-	OrderStatus     int     `gorm:"column:order_status" json:"orderStatus"`
-	OrderStatusName string  `gorm:"-" json:"orderStatusName"`
-	PayStatus       int     `gorm:"column:pay_status" json:"payStatus"`
-	TotalAmount     float64 `gorm:"column:total_amount" json:"totalAmount"`
-	TotalAmountText string  `gorm:"-" json:"totalAmountText"`
-	PayAmount       float64 `gorm:"column:pay_amount" json:"payAmount"`
-	ProductID       uint64  `gorm:"column:product_id" json:"productId"`
-	SkuID           uint64  `gorm:"column:sku_id" json:"skuId"`
-	ProductName     string  `gorm:"column:product_name" json:"productName"`
-	SkuName         string  `gorm:"column:sku_name" json:"skuName"`
-	CoverURL        string  `gorm:"column:cover_url" json:"coverUrl"`
-	Price           float64 `gorm:"column:price" json:"price"`
-	PriceText       string  `gorm:"-" json:"priceText"`
-	Quantity        int     `gorm:"column:quantity" json:"quantity"`
-	ExpireTime      string  `gorm:"column:expire_time" json:"expireTime"`
-	CreateTime      string  `gorm:"column:create_time" json:"createTime"`
-	UpdateTime      string  `gorm:"column:update_time" json:"updateTime"`
+	OrderID          uint64  `gorm:"column:order_id" json:"orderId"`
+	OrderNo          string  `gorm:"column:order_no" json:"orderNo"`
+	UserID           string  `gorm:"column:user_id" json:"userId"`
+	OrderStatus      int     `gorm:"column:order_status" json:"orderStatus"`
+	OrderStatusName  string  `gorm:"-" json:"orderStatusName"`
+	PayStatus        int     `gorm:"column:pay_status" json:"payStatus"`
+	TotalAmount      float64 `gorm:"column:total_amount" json:"totalAmount"`
+	TotalAmountText  string  `gorm:"-" json:"totalAmountText"`
+	PayAmount        float64 `gorm:"column:pay_amount" json:"payAmount"`
+	ProductID        uint64  `gorm:"column:product_id" json:"productId"`
+	SkuID            uint64  `gorm:"column:sku_id" json:"skuId"`
+	ProductName      string  `gorm:"column:product_name" json:"productName"`
+	SkuName          string  `gorm:"column:sku_name" json:"skuName"`
+	CoverURL         string  `gorm:"column:cover_url" json:"coverUrl"`
+	Price            float64 `gorm:"column:price" json:"price"`
+	PriceText        string  `gorm:"-" json:"priceText"`
+	Quantity         int     `gorm:"column:quantity" json:"quantity"`
+	CurrentCoinCount int     `gorm:"-" json:"currentCoinCount"`
+	ExpireTime       string  `gorm:"column:expire_time" json:"expireTime"`
+	CreateTime       string  `gorm:"column:create_time" json:"createTime"`
+	UpdateTime       string  `gorm:"column:update_time" json:"updateTime"`
 }

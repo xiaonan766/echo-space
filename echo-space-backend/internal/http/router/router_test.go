@@ -302,6 +302,28 @@ func TestWebDynamicLoadFeedRouteRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestWebShopOrderPayRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/shop/order/pay", strings.NewReader("orderNo=20260630120000000000000000"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
 func TestWebUhomeGetUserInfoRouteDoesNotRequireLogin(t *testing.T) {
 	cfg := config.Config{}
 	cfg.Server.Mode = "test"

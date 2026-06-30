@@ -102,6 +102,21 @@ func (h *ShopOrderHandler) CancelOrder(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *ShopOrderHandler) PayOrder(c *gin.Context) {
+	tokenUserInfo, ok := getWebTokenUserInfo(c)
+	if !ok {
+		response.LoginTimeout(c)
+		return
+	}
+
+	result, err := h.orderService.PayOrder(c.Request.Context(), tokenUserInfo.UserID, formOrQuery(c, "orderNo"))
+	if err != nil {
+		handleWebOrderError(c, "web pay shop order", err)
+		return
+	}
+	response.Success(c, result)
+}
+
 func getWebTokenUserInfo(c *gin.Context) (*webservice.TokenUserInfo, bool) {
 	value, exists := c.Get(middleware.ContextWebTokenUserInfoKey)
 	if !exists {

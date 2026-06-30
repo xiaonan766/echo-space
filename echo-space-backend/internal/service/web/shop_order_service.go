@@ -232,6 +232,46 @@ func (s *ShopOrderService) CancelOrder(ctx context.Context, userID string, order
 	return s.GetOrderDetail(ctx, userID, orderNo)
 }
 
+func (s *ShopOrderService) PayOrder(ctx context.Context, userID string, orderNo string) (*domain.WebShopOrderItem, error) {
+	userID = strings.TrimSpace(userID)
+	orderNo = strings.TrimSpace(orderNo)
+	if userID == "" {
+		return nil, &BusinessError{Info: "请先登录"}
+	}
+	if orderNo == "" {
+		return nil, &BusinessError{Info: "参数错误"}
+	}
+
+	payResult, err := s.orderRepository.PayOrderByCoin(ctx, userID, orderNo, time.Now())
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, &BusinessError{Info: "订单不存在"}
+	}
+	if errors.Is(err, repository.ErrOrderExpired) {
+		s.syncClosedOrderStock(context.Background(), payResult.ClosedOrder)
+		return nil, &BusinessError{Info: "订单已超时关闭，请重新下单"}
+	}
+	if errors.Is(err, repository.ErrOrderInsufficientCoin) {
+		return nil, &BusinessError{Info: "硬币余额不足"}
+	}
+	if errors.Is(err, repository.ErrOrderCannotPay) {
+		return nil, &BusinessError{Info: "当前订单状态暂不支持支付"}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.stockStore.MarkReservationPaid(context.Background(), orderNo); err != nil {
+		log.Printf("mark stock reservation paid failed: orderNo=%s err=%v", orderNo, err)
+	}
+
+	item, err := s.GetOrderDetail(ctx, userID, orderNo)
+	if err != nil {
+		return nil, err
+	}
+	item.CurrentCoinCount = payResult.CurrentCoinCount
+	return item, nil
+}
+
 func (s *ShopOrderService) HandleShopStockLockMessage(ctx context.Context, message mq.ShopStockLockMessage) error {
 	if strings.TrimSpace(message.OrderNo) == "" || message.SkuID == 0 || message.BuyCount <= 0 {
 		return nil

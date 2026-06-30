@@ -143,4 +143,5 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	shopOrderGroup.GET("/loadOrder", shopOrderHandler.LoadOrder)
 	shopOrderGroup.POST("/loadOrder", shopOrderHandler.LoadOrder)
 	shopOrderGroup.POST("/cancel", shopOrderHandler.CancelOrder)
+	shopOrderGroup.POST("/pay", shopOrderHandler.PayOrder)
 }

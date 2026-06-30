@@ -29,6 +29,7 @@ const (
 	StockReservationStatusOrderCreated = "ORDER_CREATED"
 	StockReservationStatusLocked       = "LOCKED"
 	StockReservationStatusReleased     = "RELEASED"
+	StockReservationStatusPaid         = "PAID"
 )
 
 const preDeductStockScript = `
@@ -293,6 +294,27 @@ func (s *ShopStockStore) MarkReservationReleased(ctx context.Context, orderNo st
 		reservationKey(orderNo),
 		shopReservationTimeoutKey,
 	}, orderNo, time.Now().Unix(), int(shopReleasedReservationTTL.Seconds())).Err()
+}
+
+func (s *ShopStockStore) MarkReservationPaid(ctx context.Context, orderNo string) error {
+	if s == nil || s.redis == nil {
+		return nil
+	}
+	orderNo = strings.TrimSpace(orderNo)
+	if orderNo == "" {
+		return nil
+	}
+	key := reservationKey(orderNo)
+	exists, err := s.redis.Exists(ctx, key).Result()
+	if err != nil || exists == 0 {
+		return err
+	}
+	pipe := s.redis.TxPipeline()
+	pipe.HSet(ctx, key, "status", StockReservationStatusPaid, "payAt", time.Now().Unix())
+	pipe.ZRem(ctx, shopReservationTimeoutKey, orderNo)
+	pipe.Expire(ctx, key, shopLockedReservationKeepTTL)
+	_, err = pipe.Exec(ctx)
+	return err
 }
 
 func (s *ShopStockStore) ReleaseReservation(ctx context.Context, orderNo string) error {

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"math"
 	"time"
 
 	"gorm.io/gorm"
@@ -16,6 +17,12 @@ var ErrOrderStockInsufficient = errors.New("order stock insufficient")
 var ErrOrderStockLockSkipped = errors.New("order stock lock skipped")
 
 var ErrOrderCannotClose = errors.New("order cannot close")
+
+var ErrOrderCannotPay = errors.New("order cannot pay")
+
+var ErrOrderInsufficientCoin = errors.New("order insufficient coin")
+
+var ErrOrderExpired = errors.New("order expired")
 
 type ShopOrderRepository struct {
 	db *gorm.DB
@@ -50,6 +57,14 @@ type CloseShopOrderResult struct {
 	Quantity            int
 	Closed              bool
 	ReleasedLockedStock bool
+}
+
+type PayShopOrderResult struct {
+	OrderNo          string
+	CurrentCoinCount int
+	ClosedOrder      CloseShopOrderResult
+	AlreadyPaid      bool
+	Paid             bool
 }
 
 func NewShopOrderRepository(db *gorm.DB) *ShopOrderRepository {
@@ -359,6 +374,170 @@ func (r *ShopOrderRepository) CloseUnpaidOrder(ctx context.Context, data CloseSh
 	return result, err
 }
 
+func (r *ShopOrderRepository) PayOrderByCoin(ctx context.Context, userID string, orderNo string, now time.Time) (PayShopOrderResult, error) {
+	result := PayShopOrderResult{
+		OrderNo: orderNo,
+		ClosedOrder: CloseShopOrderResult{
+			OrderNo: orderNo,
+		},
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+
+	expired := false
+	insufficientCoin := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var order domain.ShopOrder
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("order_no = ? AND user_id = ?", orderNo, userID).
+			Take(&order).Error; err != nil {
+			return err
+		}
+
+		result.OrderNo = order.OrderNo
+		if order.PayStatus == domain.PayStatusPaid || order.OrderStatus == domain.OrderStatusPaid {
+			var user domain.UserInfo
+			if err := tx.Where("user_id = ?", userID).Take(&user).Error; err != nil {
+				return err
+			}
+			result.CurrentCoinCount = user.CurrentCoinCount
+			result.AlreadyPaid = true
+			return nil
+		}
+
+		if order.OrderStatus != domain.OrderStatusWaitPay || order.PayStatus != domain.PayStatusUnpaid {
+			return ErrOrderCannotPay
+		}
+
+		var item domain.ShopOrderItem
+		if err := tx.Where("order_no = ?", order.OrderNo).Take(&item).Error; err != nil {
+			return err
+		}
+
+		if !order.ExpireTime.IsZero() && !order.ExpireTime.After(now) {
+			closeResult, err := closeExpiredOrderInTx(tx, order, item, now)
+			if err != nil {
+				return err
+			}
+			result.ClosedOrder = closeResult
+			expired = true
+			return nil
+		}
+
+		requiredCoins := orderPayCoins(order.PayAmount)
+		if requiredCoins <= 0 {
+			return ErrOrderCannotPay
+		}
+
+		var user domain.UserInfo
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ?", userID).
+			Take(&user).Error; err != nil {
+			return err
+		}
+		if user.CurrentCoinCount < requiredCoins {
+			result.CurrentCoinCount = user.CurrentCoinCount
+			insufficientCoin = true
+			return nil
+		}
+
+		var sku domain.ShopSKU
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("sku_id = ?", item.SkuID).
+			Take(&sku).Error; err != nil {
+			return err
+		}
+		if sku.LockedStock < item.Quantity {
+			return ErrOrderCannotPay
+		}
+
+		coinUpdate := tx.Model(&domain.UserInfo{}).
+			Where("user_id = ? AND current_coin_count >= ?", userID, requiredCoins).
+			Update("current_coin_count", gorm.Expr("current_coin_count - ?", requiredCoins))
+		if coinUpdate.Error != nil {
+			return coinUpdate.Error
+		}
+		if coinUpdate.RowsAffected == 0 {
+			result.CurrentCoinCount = user.CurrentCoinCount
+			insufficientCoin = true
+			return nil
+		}
+		result.CurrentCoinCount = user.CurrentCoinCount - requiredCoins
+
+		coinFlow := &domain.ShopCoinFlow{
+			UserID:     userID,
+			OrderNo:    order.OrderNo,
+			ChangeType: domain.ShopCoinFlowTypePay,
+			ChangeCoin: -requiredCoins,
+			BeforeCoin: user.CurrentCoinCount,
+			AfterCoin:  result.CurrentCoinCount,
+			Remark:     "周边订单支付",
+		}
+		if err := tx.Create(coinFlow).Error; err != nil {
+			return err
+		}
+
+		afterLocked := sku.LockedStock - item.Quantity
+		afterSold := sku.SoldStock + item.Quantity
+		skuUpdate := tx.Model(&domain.ShopSKU{}).
+			Where("sku_id = ? AND locked_stock >= ?", item.SkuID, item.Quantity).
+			Updates(map[string]any{
+				"locked_stock": gorm.Expr("locked_stock - ?", item.Quantity),
+				"sold_stock":   gorm.Expr("sold_stock + ?", item.Quantity),
+				"version":      gorm.Expr("version + ?", 1),
+			})
+		if skuUpdate.Error != nil {
+			return skuUpdate.Error
+		}
+		if skuUpdate.RowsAffected == 0 {
+			return ErrOrderCannotPay
+		}
+
+		stockFlow := &domain.ShopStockFlow{
+			SkuID:             item.SkuID,
+			OrderNo:           order.OrderNo,
+			ChangeType:        domain.StockFlowTypeSold,
+			ChangeCount:       item.Quantity,
+			BeforeLockedStock: sku.LockedStock,
+			AfterLockedStock:  afterLocked,
+			BeforeSoldStock:   sku.SoldStock,
+			AfterSoldStock:    afterSold,
+		}
+		if err := tx.Create(stockFlow).Error; err != nil {
+			return err
+		}
+
+		payTime := now
+		orderUpdate := tx.Model(&domain.ShopOrder{}).
+			Where("order_no = ? AND order_status = ? AND pay_status = ?", order.OrderNo, domain.OrderStatusWaitPay, domain.PayStatusUnpaid).
+			Updates(map[string]any{
+				"order_status": domain.OrderStatusPaid,
+				"pay_status":   domain.PayStatusPaid,
+				"pay_time":     payTime,
+			})
+		if orderUpdate.Error != nil {
+			return orderUpdate.Error
+		}
+		if orderUpdate.RowsAffected == 0 {
+			return ErrOrderCannotPay
+		}
+
+		result.Paid = true
+		return nil
+	})
+	if err != nil {
+		return result, err
+	}
+	if expired {
+		return result, ErrOrderExpired
+	}
+	if insufficientCoin {
+		return result, ErrOrderInsufficientCoin
+	}
+	return result, nil
+}
+
 func (r *ShopOrderRepository) ListExpiredUnpaidOrderNos(ctx context.Context, now time.Time, limit int) ([]string, error) {
 	if limit <= 0 {
 		limit = 100
@@ -489,6 +668,51 @@ func closeOrderLockedStock(tx *gorm.DB, orderNo string, item domain.ShopOrderIte
 		AfterSoldStock:    sku.SoldStock,
 	}
 	return tx.Create(flow).Error
+}
+
+func closeExpiredOrderInTx(tx *gorm.DB, order domain.ShopOrder, item domain.ShopOrderItem, now time.Time) (CloseShopOrderResult, error) {
+	result := CloseShopOrderResult{
+		OrderNo:   order.OrderNo,
+		ProductID: item.ProductID,
+		SkuID:     item.SkuID,
+		Quantity:  item.Quantity,
+	}
+
+	var lockFlowCount int64
+	if err := tx.Model(&domain.ShopStockFlow{}).
+		Where("sku_id = ? AND order_no = ? AND change_type = ?", item.SkuID, order.OrderNo, domain.StockFlowTypeLock).
+		Count(&lockFlowCount).Error; err != nil {
+		return result, err
+	}
+	var unlockFlowCount int64
+	if err := tx.Model(&domain.ShopStockFlow{}).
+		Where("sku_id = ? AND order_no = ? AND change_type = ?", item.SkuID, order.OrderNo, domain.StockFlowTypeUnlock).
+		Count(&unlockFlowCount).Error; err != nil {
+		return result, err
+	}
+
+	if lockFlowCount > 0 && unlockFlowCount == 0 {
+		if err := closeOrderLockedStock(tx, order.OrderNo, item); err != nil {
+			return result, err
+		}
+		result.ReleasedLockedStock = item.Quantity > 0
+	}
+
+	updateResult := tx.Model(&domain.ShopOrder{}).
+		Where("order_no = ? AND order_status = ? AND pay_status = ?", order.OrderNo, domain.OrderStatusWaitPay, domain.PayStatusUnpaid).
+		Updates(map[string]any{
+			"order_status": domain.OrderStatusTimeout,
+			"cancel_time":  now,
+		})
+	if updateResult.Error != nil {
+		return result, updateResult.Error
+	}
+	result.Closed = updateResult.RowsAffected > 0
+	return result, nil
+}
+
+func orderPayCoins(payAmount float64) int {
+	return int(math.Round(payAmount * 100))
 }
 
 func nowAddMinutes(minutes int) time.Time {
