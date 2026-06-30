@@ -53,6 +53,9 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	videoOnlineStore := cache.NewVideoOnlineStore(deps.Redis)
 	videoOnlineService := webservice.NewVideoOnlineService(videoOnlineStore)
 	onlineHandler := webhandler.NewOnlineHandler(videoOnlineService)
+	statisticsRepository := repository.NewStatisticsRepository(deps.DB)
+	statisticsService := webservice.NewStatisticsService(statisticsRepository)
+	statisticsHandler := webhandler.NewStatisticsHandler(statisticsService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
 	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
@@ -88,6 +91,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	ucenterGroup := group.Group("/ucenter", middleware.WebAuth(accountService))
 	ucenterGroup.POST("/postVideo", videoPostHandler.PostVideo)
 	ucenterGroup.POST("/loadVideoList", videoPostHandler.LoadVideoList)
+	ucenterGroup.GET("/getActualTimeStatisticsInfo", statisticsHandler.GetActualTimeStatisticsInfo)
+	ucenterGroup.POST("/getActualTimeStatisticsInfo", statisticsHandler.GetActualTimeStatisticsInfo)
 
 	fileGroup.POST("/preUploadVideo", middleware.WebAuth(accountService), videoUploadHandler.PreUploadVideo)
 	fileGroup.POST("/uploadVideo", middleware.WebAuth(accountService), videoUploadHandler.UploadVideo)
