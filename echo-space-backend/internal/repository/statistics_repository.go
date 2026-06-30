@@ -39,6 +39,21 @@ func (r *StatisticsRepository) ListByUserAndDate(ctx context.Context, userID str
 	return list, nil
 }
 
+func (r *StatisticsRepository) ListByUserTypeAndDateRange(ctx context.Context, userID string, dataType int, startDate string, endDate string) ([]domain.StatisticsInfo, error) {
+	var list []domain.StatisticsInfo
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND date_type = ? AND statistics_date >= ? AND statistics_date <= ?", userID, dataType, startDate, endDate).
+		Order("statistics_date asc").
+		Find(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = []domain.StatisticsInfo{}
+	}
+	return list, nil
+}
+
 func (r *StatisticsRepository) GetTotalStatisticsCountInfo(ctx context.Context, userID string) (map[string]int, error) {
 	var row totalStatisticsRow
 	err := r.db.WithContext(ctx).

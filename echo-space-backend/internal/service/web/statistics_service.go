@@ -21,6 +21,7 @@ const (
 
 type StatisticsDataRepository interface {
 	ListByUserAndDate(ctx context.Context, userID string, statisticsDate string) ([]domain.StatisticsInfo, error)
+	ListByUserTypeAndDateRange(ctx context.Context, userID string, dataType int, startDate string, endDate string) ([]domain.StatisticsInfo, error)
 	GetTotalStatisticsCountInfo(ctx context.Context, userID string) (map[string]int, error)
 }
 
@@ -61,11 +62,55 @@ func (s *StatisticsService) GetActualTimeStatisticsInfo(ctx context.Context, use
 	}, nil
 }
 
+func (s *StatisticsService) GetWeekStatisticsInfo(ctx context.Context, userID string, dataType int) ([]domain.StatisticsInfo, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, &BusinessError{Info: "请先登录"}
+	}
+	if !validStatisticsType(dataType) {
+		return nil, &BusinessError{Info: "参数错误"}
+	}
+	if s == nil || s.repository == nil {
+		return nil, errors.New("statistics service is not ready")
+	}
+
+	dates := s.previousSevenDates()
+	statisticsList, err := s.repository.ListByUserTypeAndDateRange(ctx, userID, dataType, dates[0], dates[len(dates)-1])
+	if err != nil {
+		return nil, err
+	}
+	return buildWeekStatisticsList(userID, dataType, dates, statisticsList), nil
+}
+
 func (s *StatisticsService) currentTime() time.Time {
 	if s != nil && s.now != nil {
 		return s.now()
 	}
 	return time.Now()
+}
+
+func (s *StatisticsService) previousSevenDates() []string {
+	current := s.currentTime()
+	dates := make([]string, 0, 7)
+	for offset := 7; offset >= 1; offset-- {
+		dates = append(dates, current.AddDate(0, 0, -offset).Format("2006-01-02"))
+	}
+	return dates
+}
+
+func validStatisticsType(dataType int) bool {
+	switch dataType {
+	case statisticsTypePlay,
+		statisticsTypeFans,
+		statisticsTypeLike,
+		statisticsTypeCollect,
+		statisticsTypeCoin,
+		statisticsTypeComment,
+		statisticsTypeDanmu:
+		return true
+	default:
+		return false
+	}
 }
 
 func buildPreDayStatisticsMap(list []domain.StatisticsInfo) map[int]int {
@@ -82,6 +127,28 @@ func buildPreDayStatisticsMap(list []domain.StatisticsInfo) map[int]int {
 		if _, ok := result[item.DateType]; ok {
 			result[item.DateType] = item.StatisticsCount
 		}
+	}
+	return result
+}
+
+func buildWeekStatisticsList(userID string, dataType int, dates []string, list []domain.StatisticsInfo) []domain.StatisticsInfo {
+	dataMap := make(map[string]domain.StatisticsInfo, len(list))
+	for _, item := range list {
+		dataMap[item.StatisticsDate] = item
+	}
+
+	result := make([]domain.StatisticsInfo, 0, len(dates))
+	for _, date := range dates {
+		item, ok := dataMap[date]
+		if !ok {
+			item = domain.StatisticsInfo{
+				StatisticsDate:  date,
+				UserID:          userID,
+				DateType:        dataType,
+				StatisticsCount: 0,
+			}
+		}
+		result = append(result, item)
 	}
 	return result
 }

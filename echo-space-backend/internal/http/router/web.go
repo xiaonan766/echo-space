@@ -100,6 +100,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	ucenterGroup.POST("/loadVideoList", videoPostHandler.LoadVideoList)
 	ucenterGroup.GET("/getActualTimeStatisticsInfo", statisticsHandler.GetActualTimeStatisticsInfo)
 	ucenterGroup.POST("/getActualTimeStatisticsInfo", statisticsHandler.GetActualTimeStatisticsInfo)
+	ucenterGroup.GET("/getWeekStatisticsInfo", statisticsHandler.GetWeekStatisticsInfo)
+	ucenterGroup.POST("/getWeekStatisticsInfo", statisticsHandler.GetWeekStatisticsInfo)
 
 	fileGroup.POST("/preUploadVideo", middleware.WebAuth(accountService), videoUploadHandler.PreUploadVideo)
 	fileGroup.POST("/uploadVideo", middleware.WebAuth(accountService), videoUploadHandler.UploadVideo)
