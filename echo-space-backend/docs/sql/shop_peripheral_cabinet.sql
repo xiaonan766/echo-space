@@ -1,0 +1,13 @@
+ALTER TABLE user_info
+  ADD COLUMN shop_cabinet_visible TINYINT NOT NULL DEFAULT 0 COMMENT '周边收藏柜是否公开展示 0否 1是';
+
+CREATE TABLE IF NOT EXISTS shop_cabinet_hidden_item (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  user_id VARCHAR(10) NOT NULL COMMENT '用户ID',
+  product_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '商品ID',
+  sku_id BIGINT UNSIGNED NOT NULL COMMENT 'SKU ID',
+  hide_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '隐藏时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_user_sku (user_id, sku_id),
+  KEY idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='周边收藏柜隐藏明细';

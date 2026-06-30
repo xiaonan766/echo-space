@@ -138,6 +138,10 @@ const router = createRouter({
           name: 'collection',
           component: () => import('@/views/userhome/Collection.vue'),
         }, {
+          path: '/user/:userId/peripheralCabinet',
+          name: 'peripheralCabinet',
+          component: () => import('@/views/userhome/PeripheralCabinet.vue'),
+        }, {
           path: '/user/:userId/focus',
           name: 'uhomeFocus',
           component: () => import('@/views/userhome/FocusFansList.vue'),

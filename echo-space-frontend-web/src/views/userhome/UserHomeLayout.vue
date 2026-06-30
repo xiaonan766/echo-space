@@ -183,6 +183,12 @@ const navList = ref([
     icon: "icon-collection",
     pathNames: ["collection"],
   },
+  {
+    name: "周边柜",
+    path: "/user/" + currentUserId + "/peripheralCabinet",
+    icon: "icon-collection",
+    pathNames: ["peripheralCabinet"],
+  },
 ]);
 //是否是自己
 const myself = computed(() => {

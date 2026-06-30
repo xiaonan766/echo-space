@@ -38,6 +38,9 @@ const Api = {
     uHomeUpdateUserInfo: server_web + "/uhome/updateUserInfo",
     uHomeLoadVideo: server_web + "/uhome/loadVideoList",
     uHomeGetUsesrInfo: server_web + "/uhome/getUserInfo",
+    uHomeLoadPeripheralCabinet: server_web + "/uhome/loadPeripheralCabinet",
+    uHomeUpdatePeripheralCabinetVisible: server_web + "/uhome/updatePeripheralCabinetVisible",
+    uHomeUpdatePeripheralCabinetItemVisible: server_web + "/uhome/updatePeripheralCabinetItemVisible",
     //关注
     uHomeFocus: server_web + "/uhome/focus",
     //取消关注

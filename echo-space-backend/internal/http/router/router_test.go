@@ -284,6 +284,75 @@ func TestWebUhomeUpdateUserInfoRouteRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestWebUhomeLoadPeripheralCabinetRouteDoesNotRequireLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/uhome/loadPeripheralCabinet", strings.NewReader("userId=bad"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code == response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want non-login response", result.Code)
+	}
+	if result.Code != response.CodeBusinessFail {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeBusinessFail)
+	}
+}
+
+func TestWebUhomeUpdatePeripheralCabinetVisibleRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/uhome/updatePeripheralCabinetVisible", strings.NewReader("visible=1"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
+func TestWebUhomeUpdatePeripheralCabinetItemVisibleRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/uhome/updatePeripheralCabinetItemVisible", strings.NewReader("skuId=1&visible=0"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
 func TestWebDynamicLoadCurrentUserInfoRouteRequiresLogin(t *testing.T) {
 	cfg := config.Config{}
 	cfg.Server.Mode = "test"

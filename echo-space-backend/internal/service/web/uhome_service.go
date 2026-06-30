@@ -185,6 +185,7 @@ func (s *UhomeService) GetUserInfo(ctx context.Context, currentUserID string, us
 		FansCount:          int(fansCount),
 		FocusCount:         int(focusCount),
 		HaveFocus:          haveFocus,
+		ShopCabinetVisible: userInfo.ShopCabinetVisible == 1,
 	}, nil
 }
 
