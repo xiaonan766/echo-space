@@ -50,6 +50,9 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	commentHandler := webhandler.NewCommentHandler(commentService, accountService)
 	userActionService := webservice.NewUserActionService(interactRepository)
 	userActionHandler := webhandler.NewUserActionHandler(userActionService)
+	videoOnlineStore := cache.NewVideoOnlineStore(deps.Redis)
+	videoOnlineService := webservice.NewVideoOnlineService(videoOnlineStore)
+	onlineHandler := webhandler.NewOnlineHandler(videoOnlineService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
 	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
@@ -127,6 +130,10 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 
 	userActionGroup := interactGroup.Group("/userAction", middleware.WebAuth(accountService))
 	userActionGroup.POST("/doAction", userActionHandler.DoAction)
+
+	onlineGroup := interactGroup.Group("/online")
+	onlineGroup.GET("/reportVideoPlayOnline", onlineHandler.ReportVideoPlayOnline)
+	onlineGroup.POST("/reportVideoPlayOnline", onlineHandler.ReportVideoPlayOnline)
 
 	shopGroup := group.Group("/shop")
 	shopGroup.GET("/loadRecommend", shopHandler.LoadRecommend)
