@@ -269,6 +269,30 @@ func (r *VideoRepository) ListWebVideo(ctx context.Context, query WebVideoListQu
 	return list, nil
 }
 
+func (r *VideoRepository) ListUserAllVideo(ctx context.Context, userID string) ([]domain.UcenterAllVideoItem, error) {
+	var list []domain.UcenterAllVideoItem
+	err := r.db.WithContext(ctx).
+		Table("video_info").
+		Select(`
+			video_id,
+			COALESCE(video_cover, '') AS video_cover,
+			COALESCE(video_name, '') AS video_name,
+			COALESCE(DATE_FORMAT(create_time, '%Y-%m-%d %H:%i:%s'), '') AS create_time,
+			COALESCE(danmu_count, 0) AS danmu_count,
+			COALESCE(comment_count, 0) AS comment_count
+		`).
+		Where("user_id = ?", userID).
+		Order("create_time desc").
+		Scan(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = []domain.UcenterAllVideoItem{}
+	}
+	return list, nil
+}
+
 func (r *VideoRepository) applyWebVideoListFilter(db *gorm.DB, query WebVideoListQuery) *gorm.DB {
 	db = db.Where("vi.recommend_type = ?", query.RecommendType)
 	if query.PCategoryID > 0 {

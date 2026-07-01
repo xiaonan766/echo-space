@@ -39,6 +39,14 @@ type CommentCursorQuery struct {
 	LastLikeCount int
 }
 
+type UcenterInteractListQuery struct {
+	UserID    string
+	VideoID   string
+	CursorID  int
+	Direction string
+	Limit     int
+}
+
 func NewInteractRepository(db *gorm.DB) *InteractRepository {
 	return &InteractRepository{
 		db: db,
@@ -113,6 +121,90 @@ func (r *InteractRepository) ListDanmuByPage(ctx context.Context, query Interact
 		return nil, 0, err
 	}
 	return danmuList, totalCount, nil
+}
+
+func (r *InteractRepository) ListUcenterCommentByCursor(ctx context.Context, query UcenterInteractListQuery) ([]domain.UcenterCommentItem, error) {
+	var comments []domain.UcenterCommentItem
+	listDB := r.applyUcenterCommentFilter(r.db.WithContext(ctx).Table("video_comment vc"), query)
+	if query.CursorID > 0 {
+		if query.Direction == "prev" {
+			listDB = listDB.Where("vc.comment_id > ?", query.CursorID)
+		} else {
+			listDB = listDB.Where("vc.comment_id < ?", query.CursorID)
+		}
+	}
+	if query.Direction == "prev" {
+		listDB = listDB.Order("vc.comment_id asc")
+	} else {
+		listDB = listDB.Order("vc.comment_id desc")
+	}
+	err := listDB.
+		Select(`
+			vc.comment_id,
+			vc.p_comment_id,
+			vc.video_id,
+			COALESCE(vi.video_name, '') AS video_name,
+			COALESCE(vi.video_cover, '') AS video_cover,
+			vc.user_id,
+			COALESCE(ui.nick_name, '') AS nick_name,
+			COALESCE(ui.avatar, '') AS avatar,
+			COALESCE(vc.reply_user_id, '') AS reply_user_id,
+			COALESCE(reply_user.nick_name, '') AS reply_nick_name,
+			COALESCE(vc.content, '') AS content,
+			COALESCE(vc.img_path, '') AS img_path,
+			COALESCE(DATE_FORMAT(vc.post_time, '%Y-%m-%d %H:%i:%s'), '') AS post_time
+		`).
+		Joins("LEFT JOIN video_info vi ON vc.video_id = vi.video_id").
+		Joins("LEFT JOIN user_info ui ON vc.user_id = ui.user_id").
+		Joins("LEFT JOIN user_info reply_user ON vc.reply_user_id = reply_user.user_id").
+		Limit(query.Limit).
+		Scan(&comments).Error
+	if err != nil {
+		return nil, err
+	}
+	if comments == nil {
+		comments = []domain.UcenterCommentItem{}
+	}
+	return comments, nil
+}
+
+func (r *InteractRepository) ListUcenterDanmuByCursor(ctx context.Context, query UcenterInteractListQuery) ([]domain.UcenterDanmuItem, error) {
+	var danmuList []domain.UcenterDanmuItem
+	listDB := r.applyUcenterDanmuFilter(r.db.WithContext(ctx).Table("video_danmu vd"), query)
+	if query.CursorID > 0 {
+		if query.Direction == "prev" {
+			listDB = listDB.Where("vd.danmu_id > ?", query.CursorID)
+		} else {
+			listDB = listDB.Where("vd.danmu_id < ?", query.CursorID)
+		}
+	}
+	if query.Direction == "prev" {
+		listDB = listDB.Order("vd.danmu_id asc")
+	} else {
+		listDB = listDB.Order("vd.danmu_id desc")
+	}
+	err := listDB.
+		Select(`
+			vd.danmu_id,
+			vd.video_id,
+			COALESCE(vi.video_name, '') AS video_name,
+			COALESCE(vi.video_cover, '') AS video_cover,
+			vd.user_id,
+			COALESCE(ui.nick_name, '') AS nick_name,
+			vd.time,
+			COALESCE(vd.text, '') AS text,
+			COALESCE(DATE_FORMAT(vd.post_time, '%Y-%m-%d %H:%i:%s'), '') AS post_time
+		`).
+		Joins("LEFT JOIN user_info ui ON vd.user_id = ui.user_id").
+		Limit(query.Limit).
+		Scan(&danmuList).Error
+	if err != nil {
+		return nil, err
+	}
+	if danmuList == nil {
+		danmuList = []domain.UcenterDanmuItem{}
+	}
+	return danmuList, nil
 }
 
 func (r *InteractRepository) FindCommentDeleteInfo(ctx context.Context, commentID int) (*domain.CommentDeleteInfo, error) {
@@ -461,6 +553,23 @@ func (r *InteractRepository) applyVideoNameFilter(db *gorm.DB, tableAlias string
 	db = db.Joins("LEFT JOIN video_info vi ON " + tableAlias + ".video_id = vi.video_id")
 	if query.VideoNameFuzzy != "" {
 		db = db.Where("vi.video_name LIKE ?", "%"+query.VideoNameFuzzy+"%")
+	}
+	return db
+}
+
+func (r *InteractRepository) applyUcenterCommentFilter(db *gorm.DB, query UcenterInteractListQuery) *gorm.DB {
+	db = db.Where("vc.video_user_id = ?", query.UserID)
+	if query.VideoID != "" {
+		db = db.Where("vc.video_id = ?", query.VideoID)
+	}
+	return db
+}
+
+func (r *InteractRepository) applyUcenterDanmuFilter(db *gorm.DB, query UcenterInteractListQuery) *gorm.DB {
+	db = db.Joins("INNER JOIN video_info vi ON vd.video_id = vi.video_id").
+		Where("vi.user_id = ?", query.UserID)
+	if query.VideoID != "" {
+		db = db.Where("vd.video_id = ?", query.VideoID)
 	}
 	return db
 }

@@ -59,6 +59,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	statisticsRepository := repository.NewStatisticsRepository(deps.DB)
 	statisticsService := webservice.NewStatisticsService(statisticsRepository)
 	statisticsHandler := webhandler.NewStatisticsHandler(statisticsService)
+	ucenterContentService := webservice.NewUcenterContentService(videoRepository, interactRepository)
+	ucenterContentHandler := webhandler.NewUcenterContentHandler(ucenterContentService)
 
 	shopRepository := repository.NewShopRepository(deps.DB)
 	shopRecommendStore := cache.NewShopRecommendStore(deps.Cache, deps.Redis)
@@ -98,6 +100,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	ucenterGroup := group.Group("/ucenter", middleware.WebAuth(accountService))
 	ucenterGroup.POST("/postVideo", videoPostHandler.PostVideo)
 	ucenterGroup.POST("/loadVideoList", videoPostHandler.LoadVideoList)
+	ucenterGroup.GET("/loadAllVideo", ucenterContentHandler.LoadAllVideo)
+	ucenterGroup.POST("/loadAllVideo", ucenterContentHandler.LoadAllVideo)
 	ucenterGroup.GET("/getActualTimeStatisticsInfo", statisticsHandler.GetActualTimeStatisticsInfo)
 	ucenterGroup.POST("/getActualTimeStatisticsInfo", statisticsHandler.GetActualTimeStatisticsInfo)
 	ucenterGroup.GET("/getWeekStatisticsInfo", statisticsHandler.GetWeekStatisticsInfo)
@@ -141,6 +145,12 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	commentGroup.POST("/loadComment", commentHandler.LoadComment)
 	commentGroup.Use(middleware.WebAuth(accountService))
 	commentGroup.POST("/postComment", commentHandler.PostComment)
+
+	interactUcenterGroup := interactGroup.Group("/ucenter", middleware.WebAuth(accountService))
+	interactUcenterGroup.GET("/loadComment", ucenterContentHandler.LoadComment)
+	interactUcenterGroup.POST("/loadComment", ucenterContentHandler.LoadComment)
+	interactUcenterGroup.GET("/loadDanmu", ucenterContentHandler.LoadDanmu)
+	interactUcenterGroup.POST("/loadDanmu", ucenterContentHandler.LoadDanmu)
 
 	userActionGroup := interactGroup.Group("/userAction", middleware.WebAuth(accountService))
 	userActionGroup.POST("/doAction", userActionHandler.DoAction)

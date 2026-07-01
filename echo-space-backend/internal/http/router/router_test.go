@@ -76,6 +76,71 @@ func TestWebUcenterWeekStatisticsRouteRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestWebUcenterLoadAllVideoRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/ucenter/loadAllVideo", nil)
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
+func TestInteractUcenterLoadCommentRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/interact/ucenter/loadComment", strings.NewReader("pageSize=15"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
+func TestInteractUcenterLoadDanmuRouteRequiresLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/interact/ucenter/loadDanmu", strings.NewReader("pageSize=15"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code != response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeLoginTimeout)
+	}
+}
+
 func TestPostDanmuRouteRequiresLogin(t *testing.T) {
 	cfg := config.Config{}
 	cfg.Server.Mode = "test"

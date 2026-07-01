@@ -10,18 +10,26 @@ import (
 )
 
 type fakeStatisticsRepository struct {
-	list           []domain.StatisticsInfo
-	weekList       []domain.StatisticsInfo
-	total          map[string]int
-	listErr        error
-	weekErr        error
-	totalErr       error
-	userID         string
-	statisticsDate string
-	weekUserID     string
-	weekDataType   int
-	weekStartDate  string
-	weekEndDate    string
+	list                 []domain.StatisticsInfo
+	weekList             []domain.StatisticsInfo
+	commentWeekList      []domain.StatisticsInfo
+	total                map[string]int
+	listErr              error
+	weekErr              error
+	commentWeekErr       error
+	totalErr             error
+	userID               string
+	statisticsDate       string
+	weekCalled           bool
+	weekUserID           string
+	weekDataType         int
+	weekStartDate        string
+	weekEndDate          string
+	commentWeekCalled    bool
+	commentWeekUserID    string
+	commentWeekDataType  int
+	commentWeekStartDate string
+	commentWeekEndDate   string
 }
 
 func (r *fakeStatisticsRepository) ListByUserAndDate(ctx context.Context, userID string, statisticsDate string) ([]domain.StatisticsInfo, error) {
@@ -31,11 +39,21 @@ func (r *fakeStatisticsRepository) ListByUserAndDate(ctx context.Context, userID
 }
 
 func (r *fakeStatisticsRepository) ListByUserTypeAndDateRange(ctx context.Context, userID string, dataType int, startDate string, endDate string) ([]domain.StatisticsInfo, error) {
+	r.weekCalled = true
 	r.weekUserID = userID
 	r.weekDataType = dataType
 	r.weekStartDate = startDate
 	r.weekEndDate = endDate
 	return r.weekList, r.weekErr
+}
+
+func (r *fakeStatisticsRepository) ListCommentDailyCountByUserAndDateRange(ctx context.Context, userID string, dataType int, startDate string, endDate string) ([]domain.StatisticsInfo, error) {
+	r.commentWeekCalled = true
+	r.commentWeekUserID = userID
+	r.commentWeekDataType = dataType
+	r.commentWeekStartDate = startDate
+	r.commentWeekEndDate = endDate
+	return r.commentWeekList, r.commentWeekErr
 }
 
 func (r *fakeStatisticsRepository) GetTotalStatisticsCountInfo(ctx context.Context, userID string) (map[string]int, error) {
@@ -158,6 +176,50 @@ func TestStatisticsServiceGetWeekStatisticsInfo(t *testing.T) {
 		}
 		if result[index].DateType != statisticsTypePlay {
 			t.Fatalf("result[%d].DateType = %d, want %d", index, result[index].DateType, statisticsTypePlay)
+		}
+	}
+}
+
+func TestStatisticsServiceGetWeekStatisticsInfoUsesLiveCommentData(t *testing.T) {
+	repository := &fakeStatisticsRepository{
+		weekErr: errors.New("statistics table should not be used for comments"),
+		commentWeekList: []domain.StatisticsInfo{
+			{StatisticsDate: "2026-06-25", UserID: "1000000001", DateType: statisticsTypeComment, StatisticsCount: 4},
+			{StatisticsDate: "2026-06-30", UserID: "1000000001", DateType: statisticsTypeComment, StatisticsCount: 2},
+		},
+	}
+	service := NewStatisticsService(repository)
+	service.now = func() time.Time {
+		return time.Date(2026, 7, 1, 12, 0, 0, 0, time.Local)
+	}
+
+	result, err := service.GetWeekStatisticsInfo(context.Background(), "1000000001", statisticsTypeComment)
+	if err != nil {
+		t.Fatalf("GetWeekStatisticsInfo error = %v", err)
+	}
+	if repository.weekCalled {
+		t.Fatal("statistics_info repository should not be used for comment week data")
+	}
+	if !repository.commentWeekCalled {
+		t.Fatal("comment week repository was not called")
+	}
+	if repository.commentWeekUserID != "1000000001" {
+		t.Fatalf("comment repository userID = %s, want %s", repository.commentWeekUserID, "1000000001")
+	}
+	if repository.commentWeekDataType != statisticsTypeComment {
+		t.Fatalf("comment repository dataType = %d, want %d", repository.commentWeekDataType, statisticsTypeComment)
+	}
+	if repository.commentWeekStartDate != "2026-06-24" || repository.commentWeekEndDate != "2026-06-30" {
+		t.Fatalf("comment date range = %s..%s, want 2026-06-24..2026-06-30", repository.commentWeekStartDate, repository.commentWeekEndDate)
+	}
+
+	expectedCounts := []int{0, 4, 0, 0, 0, 0, 2}
+	for index, expectedCount := range expectedCounts {
+		if result[index].DateType != statisticsTypeComment {
+			t.Fatalf("result[%d].DateType = %d, want %d", index, result[index].DateType, statisticsTypeComment)
+		}
+		if result[index].StatisticsCount != expectedCount {
+			t.Fatalf("result[%d].StatisticsCount = %d, want %d", index, result[index].StatisticsCount, expectedCount)
 		}
 	}
 }

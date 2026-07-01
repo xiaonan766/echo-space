@@ -22,6 +22,7 @@ const (
 type StatisticsDataRepository interface {
 	ListByUserAndDate(ctx context.Context, userID string, statisticsDate string) ([]domain.StatisticsInfo, error)
 	ListByUserTypeAndDateRange(ctx context.Context, userID string, dataType int, startDate string, endDate string) ([]domain.StatisticsInfo, error)
+	ListCommentDailyCountByUserAndDateRange(ctx context.Context, userID string, dataType int, startDate string, endDate string) ([]domain.StatisticsInfo, error)
 	GetTotalStatisticsCountInfo(ctx context.Context, userID string) (map[string]int, error)
 }
 
@@ -75,7 +76,13 @@ func (s *StatisticsService) GetWeekStatisticsInfo(ctx context.Context, userID st
 	}
 
 	dates := s.previousSevenDates()
-	statisticsList, err := s.repository.ListByUserTypeAndDateRange(ctx, userID, dataType, dates[0], dates[len(dates)-1])
+	var statisticsList []domain.StatisticsInfo
+	var err error
+	if dataType == statisticsTypeComment {
+		statisticsList, err = s.repository.ListCommentDailyCountByUserAndDateRange(ctx, userID, dataType, dates[0], dates[len(dates)-1])
+	} else {
+		statisticsList, err = s.repository.ListByUserTypeAndDateRange(ctx, userID, dataType, dates[0], dates[len(dates)-1])
+	}
 	if err != nil {
 		return nil, err
 	}

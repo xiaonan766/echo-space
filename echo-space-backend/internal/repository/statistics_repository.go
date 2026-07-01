@@ -54,6 +54,29 @@ func (r *StatisticsRepository) ListByUserTypeAndDateRange(ctx context.Context, u
 	return list, nil
 }
 
+func (r *StatisticsRepository) ListCommentDailyCountByUserAndDateRange(ctx context.Context, userID string, dataType int, startDate string, endDate string) ([]domain.StatisticsInfo, error) {
+	var list []domain.StatisticsInfo
+	err := r.db.WithContext(ctx).
+		Table("video_comment").
+		Select(`
+			DATE_FORMAT(post_time, '%Y-%m-%d') AS statistics_date,
+			? AS user_id,
+			? AS date_type,
+			COUNT(*) AS statistics_count
+		`, userID, dataType).
+		Where("video_user_id = ? AND p_comment_id = ? AND post_time >= ? AND post_time < DATE_ADD(?, INTERVAL 1 DAY)", userID, 0, startDate, endDate).
+		Group("DATE_FORMAT(post_time, '%Y-%m-%d')").
+		Order("statistics_date asc").
+		Scan(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = []domain.StatisticsInfo{}
+	}
+	return list, nil
+}
+
 func (r *StatisticsRepository) GetTotalStatisticsCountInfo(ctx context.Context, userID string) (map[string]int, error) {
 	var row totalStatisticsRow
 	err := r.db.WithContext(ctx).
