@@ -54,11 +54,7 @@
             <span>数量 {{ activeOrder.quantity }}</span>
             <span>{{ activeOrder.totalAmountText }}</span>
           </div>
-          <p v-if="activeOrder.orderStatus === 0">库存正在异步锁定，稍后刷新可查看最终结果。</p>
-          <p v-else-if="activeOrder.orderStatus === 1">库存已锁定，可以使用硬币余额完成支付。</p>
-          <p v-else-if="activeOrder.orderStatus === 4">订单已取消，已锁定库存会释放回商品库存。</p>
-          <p v-else-if="activeOrder.orderStatus === 5">订单已超时关闭，已锁定库存会自动释放。</p>
-          <p v-else>本次抢购未成功，Redis 预扣库存会自动回补。</p>
+          <p>{{ activeOrderTip }}</p>
         </div>
         <div class="result-actions">
           <el-button class="refresh-button" type="primary" plain @click="loadOrderDetail">
@@ -193,6 +189,10 @@ const canLoadMore = computed(() => {
   return !listLoading.value && orderList.value.length > 0 && pageInfo.pageNo < pageInfo.pageTotal
 })
 
+const activeOrderTip = computed(() => {
+  return getOrderResultTip(activeOrder.value)
+})
+
 onMounted(() => {
   navActionStore.setShowHeader(false)
   navActionStore.setFixedHeader(false)
@@ -265,6 +265,35 @@ const canPay = (order) => {
 
 const canCancel = (order) => {
   return (order?.orderStatus === 0 || order?.orderStatus === 1) && Number(order?.payStatus || 0) === 0
+}
+
+const isPaidOrder = (order) => {
+  return order?.orderStatus === 3 || Number(order?.payStatus || 0) === 1
+}
+
+const getOrderResultTip = (order) => {
+  if (!order) {
+    return ''
+  }
+  if (isPaidOrder(order)) {
+    return '订单已支付成功，商品权益已确认。'
+  }
+  if (order.orderStatus === 0) {
+    return '库存正在异步锁定，稍后刷新可查看最终结果。'
+  }
+  if (order.orderStatus === 1) {
+    return '库存已锁定，可以使用硬币余额完成支付。'
+  }
+  if (order.orderStatus === 2) {
+    return '本次抢购未成功，Redis 预扣库存会自动回补。'
+  }
+  if (order.orderStatus === 4) {
+    return '订单已取消，已锁定库存会释放回商品库存。'
+  }
+  if (order.orderStatus === 5) {
+    return '订单已超时关闭，已锁定库存会自动释放。'
+  }
+  return '当前订单状态已更新，请刷新后查看最新结果。'
 }
 
 const handleOpenPayDialog = (order) => {
@@ -430,6 +459,9 @@ const buildImageUrl = (source) => {
 const orderStatusClass = (order) => {
   if (!order) {
     return ''
+  }
+  if (isPaidOrder(order)) {
+    return 'paid'
   }
   if (order.orderStatus === 0) {
     return 'locking'
