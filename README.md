@@ -107,6 +107,8 @@ Go 后端服务：http://localhost:7070
 个人主页周边展示柜
 <img width="1919" height="985" alt="image" src="https://github.com/user-attachments/assets/ea3854f2-44e1-4a04-af65-e4a103d7462c" />
 <img width="1919" height="989" alt="image" src="https://github.com/user-attachments/assets/06701344-6d84-489b-99f5-002d081487c2" />
+创作中心数据统计页面
+<img width="1919" height="981" alt="image" src="https://github.com/user-attachments/assets/ae2ce8aa-1674-4a28-a4e7-68a5e544040c" />
 
 —— —— —— —— —— —— —— —— —— —— —— —— ——
 
