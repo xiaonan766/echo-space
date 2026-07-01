@@ -88,6 +88,7 @@ Go 后端服务：http://localhost:7070
 <img width="1908" height="983" alt="image" src="https://github.com/user-attachments/assets/2bab2625-e942-43b7-95fb-866efe7c4c7b" />
 订单列表页面
 <img width="1919" height="985" alt="image" src="https://github.com/user-attachments/assets/c45330e6-77b1-4397-b498-de3cbe9847bc" />
+<img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/dd1a87a4-e789-444a-84e9-c5ff1a219b50" />
 上传视频页面
 <img width="1919" height="974" alt="image" src="https://github.com/user-attachments/assets/73e244da-1c1b-4a8b-844f-98ef957da413" />
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/4fea49f5-427f-4851-88d4-23f67ae82260" />
@@ -103,6 +104,15 @@ Go 后端服务：http://localhost:7070
 <img width="1919" height="976" alt="image" src="https://github.com/user-attachments/assets/1dd6b07a-b79b-4e69-bff9-919fbe6975da" />
 搜索视频页面
 <img width="1919" height="982" alt="image" src="https://github.com/user-attachments/assets/f6388f5d-1581-4791-aafd-6999e0eb8c18" />
+个人主页周边展示柜
+<img width="1919" height="985" alt="image" src="https://github.com/user-attachments/assets/ea3854f2-44e1-4a04-af65-e4a103d7462c" />
+<img width="1919" height="989" alt="image" src="https://github.com/user-attachments/assets/06701344-6d84-489b-99f5-002d081487c2" />
+创作中心数据统计页面
+<img width="1919" height="981" alt="image" src="https://github.com/user-attachments/assets/ae2ce8aa-1674-4a28-a4e7-68a5e544040c" />
+创作中心评论/弹幕管理页面
+<img width="1919" height="979" alt="image" src="https://github.com/user-attachments/assets/d8a1a8d0-227a-4f33-bbbf-3f871c40e08a" />
+<img width="1919" height="987" alt="image" src="https://github.com/user-attachments/assets/e802467b-92d2-4a92-857b-8def1d67012e" />
+<img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/e4ff6bbc-5538-4469-b4c9-55b299775a1e" />
 
 —— —— —— —— —— —— —— —— —— —— —— —— ——
 
