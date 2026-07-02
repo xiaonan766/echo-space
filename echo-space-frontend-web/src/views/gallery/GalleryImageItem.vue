@@ -2,7 +2,7 @@
   <div class="gallery-image-item" :style="{ 'margin-top': marginTop + 'px' }">
     <router-link :to="`/gallery/${data.imageId}`" target="_blank">
       <div class="cover">
-        <Cover :source="data.imageCover"></Cover>
+        <Cover :source="data.imageCover" :scale="0.5625"></Cover>
         <div class="shade">
           <div class="image-type">图片</div>
         </div>
@@ -54,6 +54,7 @@ defineProps({
     position: relative;
     overflow: hidden;
     border-radius: 5px;
+    aspect-ratio: 16 / 9;
     .shade {
       position: absolute;
       bottom: 0;

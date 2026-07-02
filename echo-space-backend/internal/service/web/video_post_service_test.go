@@ -63,15 +63,24 @@ func TestBuildVideoPostKeepsDownloadPermission(t *testing.T) {
 
 func TestValidateImagePostInput(t *testing.T) {
 	valid := normalizeVideoPostInput(SaveVideoPostInput{
-		UserID: "5171840855", VideoName: "测试图片投稿", PCategoryID: 60, PostType: 0,
+		UserID: "5171840855", VideoCover: "images/202607/cover.png", VideoName: "测试图片投稿", PCategoryID: 60, PostType: 0,
 		ContentType: domain.ContentTypeImage, Tags: "图片,测试", DownloadPermission: 1,
 		ImageList: []ImagePostUploadFile{{SourceName: "images/202607/image.png", FileName: "第一张"}},
 	})
 	if err := validateVideoPostInput(valid); err != nil {
 		t.Fatalf("valid image input returned error: %v", err)
 	}
-	if valid.VideoCover != "images/202607/image.png" {
-		t.Fatalf("VideoCover = %q, want first image", valid.VideoCover)
+
+	missingCover := valid
+	missingCover.VideoCover = ""
+	if err := validateVideoPostInput(missingCover); err == nil {
+		t.Fatal("expected missing image cover validation error")
+	}
+
+	badCoverExt := valid
+	badCoverExt.VideoCover = "images/202607/cover.txt"
+	if err := validateVideoPostInput(badCoverExt); err == nil {
+		t.Fatal("expected invalid image cover extension validation error")
 	}
 
 	tooMany := valid
@@ -91,6 +100,29 @@ func TestValidateImagePostInput(t *testing.T) {
 	unsafe.ImageList = []ImagePostUploadFile{{SourceName: "../image.png", FileName: "图片"}}
 	if err := validateVideoPostInput(unsafe); err == nil {
 		t.Fatal("expected unsafe image validation error")
+	}
+}
+
+func TestValidateImageCoverChecksResource(t *testing.T) {
+	resourceRoot := t.TempDir()
+	sourceName := "images/202607/cover.png"
+	targetPath := filepath.Join(resourceRoot, filepath.FromSlash(sourceName))
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		t.Fatalf("mkdir cover directory: %v", err)
+	}
+	if err := os.WriteFile(targetPath, []byte("cover"), 0644); err != nil {
+		t.Fatalf("write cover file: %v", err)
+	}
+
+	service := &VideoPostService{resourceRoot: resourceRoot}
+	if err := service.validateImageCover(sourceName); err != nil {
+		t.Fatalf("valid cover returned error: %v", err)
+	}
+	if err := service.validateImageCover("images/202607/missing.png"); err == nil {
+		t.Fatal("expected missing cover file validation error")
+	}
+	if err := service.validateImageCover("../cover.png"); err == nil {
+		t.Fatal("expected unsafe cover path validation error")
 	}
 }
 

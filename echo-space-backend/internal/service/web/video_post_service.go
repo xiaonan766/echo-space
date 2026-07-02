@@ -138,8 +138,13 @@ func (s *VideoPostService) SaveVideoPost(ctx context.Context, input SaveVideoPos
 		if err := s.validatePartCount(ctx, len(input.UploadFileList)); err != nil {
 			return "", err
 		}
-	} else if err := s.validateImageFiles(input.ImageList); err != nil {
-		return "", err
+	} else {
+		if err := s.validateImageCover(input.VideoCover); err != nil {
+			return "", err
+		}
+		if err := s.validateImageFiles(input.ImageList); err != nil {
+			return "", err
+		}
 	}
 
 	if input.VideoID == "" {
@@ -550,6 +555,18 @@ func (s *VideoPostService) validateImageFiles(list []ImagePostUploadFile) error 
 	return nil
 }
 
+func (s *VideoPostService) validateImageCover(sourceName string) error {
+	targetPath, err := s.safeImageResourcePath(sourceName)
+	if err != nil {
+		return err
+	}
+	fileInfo, err := os.Stat(targetPath)
+	if err != nil || fileInfo.IsDir() {
+		return &BusinessError{Info: "\u5c01\u9762\u6587\u4ef6\u4e0d\u5b58\u5728\uff0c\u8bf7\u91cd\u65b0\u4e0a\u4f20"}
+	}
+	return nil
+}
+
 func (s *VideoPostService) safeImageResourcePath(sourceName string) (string, error) {
 	sourceName = strings.TrimSpace(sourceName)
 	if sourceName == "" || !safeRelativeResourceName(sourceName) {
@@ -595,9 +612,6 @@ func normalizeVideoPostInput(input SaveVideoPostInput) SaveVideoPostInput {
 		input.ImageList[index].FileID = strings.TrimSpace(input.ImageList[index].FileID)
 		input.ImageList[index].SourceName = strings.TrimSpace(input.ImageList[index].SourceName)
 		input.ImageList[index].FileName = strings.TrimSpace(input.ImageList[index].FileName)
-	}
-	if input.ContentType == domain.ContentTypeImage && input.VideoCover == "" && len(input.ImageList) > 0 {
-		input.VideoCover = input.ImageList[0].SourceName
 	}
 	return input
 }
@@ -654,6 +668,9 @@ func validateVideoPostInput(input SaveVideoPostInput) error {
 }
 
 func validateImagePostInput(input SaveVideoPostInput) error {
+	if _, ok := imagePostAllowedExts[strings.ToLower(filepath.Ext(input.VideoCover))]; !ok {
+		return &BusinessError{Info: "\u4ec5\u652f\u6301 jpg\u3001jpeg\u3001png\u3001gif\u3001bmp\u3001webp \u683c\u5f0f\u5c01\u9762"}
+	}
 	if len(input.ImageList) == 0 {
 		return &BusinessError{Info: "请至少上传一张图片"}
 	}

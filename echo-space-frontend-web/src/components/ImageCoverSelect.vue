@@ -52,7 +52,7 @@ const coverFile = asyncComputed(async () => {
   if (typeof props.coverImage == 'string') {
     return proxy.Api.sourcePath + props.coverImage
   } else if (props.coverImage instanceof File) {
-    const base64 = await convertFile2Base64(proxy.coverImage)
+    const base64 = await convertFile2Base64(props.coverImage)
     return base64
   }
 })

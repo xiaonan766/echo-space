@@ -31,6 +31,10 @@
           <ImageCoverSelect :coverWidth="200" :cutWidth="680" :scale="0.6" :coverImage="formData.videoCover">
           </ImageCoverSelect>
         </el-form-item>
+        <el-form-item label="封面" prop="videoCover" v-else>
+          <ImageCoverSelect :coverWidth="200" :cutWidth="640" :scale="0.5625" :coverImage="formData.videoCover">
+          </ImageCoverSelect>
+        </el-form-item>
         <el-form-item label="标题" prop="videoName">
           <el-input clearable placeholder="请输入标题" v-model="formData.videoName" maxlength="100"
             show-word-limit></el-input>
@@ -224,7 +228,6 @@ const submitForm = () => {
         return
       }
       params.imageList = JSON.stringify(imageList)
-      params.videoCover = imageList[0].sourceName
       params.downloadPermission = 1
       delete params.interactionArray
     }
@@ -239,7 +242,7 @@ const submitForm = () => {
       params.interaction = params.interactionArray.join(',')
       delete params.interactionArray
     }
-    if (contentType.value === CONTENT_TYPE_VIDEO && params.videoCover instanceof File) {
+    if (params.videoCover instanceof File) {
       const videoCover = await uploadImage(params.videoCover)
       if (!videoCover) {
         return
