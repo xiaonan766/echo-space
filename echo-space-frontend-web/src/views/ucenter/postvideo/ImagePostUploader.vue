@@ -61,8 +61,9 @@ const addImage = async (uploadFile) => {
   }
 
   const fileName = proxy.Utils.getFileName(file.name)
+  const uid = file.uid || `${Date.now()}-${imageList.value.length}`
   const imageItem = {
-    uid: file.uid || `${Date.now()}-${imageList.value.length}`,
+    uid,
     fileName,
     sourceName: '',
     status: 'uploading',
@@ -72,13 +73,28 @@ const addImage = async (uploadFile) => {
 
   const sourceName = await uploadImage(file)
   if (!sourceName) {
-    imageItem.status = 'fail'
+    updateImageStatus(uid, {
+      status: 'fail',
+    })
     emitChange()
     return
   }
-  imageItem.sourceName = sourceName
-  imageItem.status = 'success'
+  updateImageStatus(uid, {
+    sourceName,
+    status: 'success',
+  })
   emitChange()
+}
+
+const updateImageStatus = (uid, values) => {
+  const index = imageList.value.findIndex((item) => item.uid === uid)
+  if (index === -1) {
+    return
+  }
+  imageList.value.splice(index, 1, {
+    ...imageList.value[index],
+    ...values,
+  })
 }
 
 const deleteImage = (index) => {

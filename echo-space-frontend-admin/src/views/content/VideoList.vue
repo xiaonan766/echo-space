@@ -1,20 +1,22 @@
 <template>
   <div class="top-panel">
     <el-card>
+      <div class="content-type-tabs">
+        <div
+          :class="['tab-item', searchForm.contentType == 0 ? 'active' : '']"
+          @click="handleContentTypeChange(0)"
+        >
+          视频投稿
+        </div>
+        <div
+          :class="['tab-item', searchForm.contentType == 1 ? 'active' : '']"
+          @click="handleContentTypeChange(1)"
+        >
+          图片投稿
+        </div>
+      </div>
       <el-form :model="searchForm" label-width="70px" label-position="right">
         <el-row>
-          <el-col :span="4">
-            <el-form-item label="稿件类型">
-              <el-select
-                placeholder="请选择稿件类型"
-                v-model="searchForm.contentType"
-                @change="handleContentTypeChange"
-              >
-                <el-option :value="0" label="视频"></el-option>
-                <el-option :value="1" label="图片"></el-option>
-              </el-select>
-            </el-form-item>
-          </el-col>
           <el-col :span="5">
             <el-form-item label="稿件名称">
               <el-input
@@ -217,7 +219,11 @@ const columns = [
 
 const tableInfoRef = ref();
 
-const handleContentTypeChange = () => {
+const handleContentTypeChange = (type) => {
+  if (searchForm.value.contentType == type) {
+    return;
+  }
+  searchForm.value.contentType = type;
   if (searchForm.value.contentType == 1) {
     searchForm.value.recommendType = undefined;
   }
@@ -313,6 +319,31 @@ const recommend = (data) => {
 </script>
 
 <style lang="scss" scoped>
+.content-type-tabs {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  border-bottom: 1px solid #e5e5e5;
+  margin: -8px -8px 18px;
+  padding: 0 22px;
+  .tab-item {
+    height: 44px;
+    line-height: 44px;
+    margin-right: 44px;
+    cursor: pointer;
+    color: #303133;
+    border-bottom: 3px solid transparent;
+    font-size: 15px;
+    &:hover {
+      color: #409eff;
+    }
+  }
+  .active {
+    color: #409eff;
+    font-weight: bold;
+    border-bottom-color: #409eff;
+  }
+}
 .detail-tree-panel {
   height: calc(100vh - 273px);
   overflow: auto;

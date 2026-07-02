@@ -8,9 +8,10 @@
 
 - web 投稿页新增 `视频投稿` / `图片投稿` 顶部切换，默认视频投稿。
 - 图片投稿支持一次上传 1-9 张图片，复用现有 `/file/uploadImage` 保存图片资源。
+- 图片上传完成后通过替换响应式列表项刷新缩略图状态，避免最后一张图片停留在上传中。
 - `/web/ucenter/postVideo` 新增可选参数 `contentType`，默认 `0=视频`；图片投稿提交 `contentType=1` 和 `imageList`。
-- 后端复用 `video_info_post` 保存稿件基础信息，复用 `video_info_file_post` 保存图片附件，图片附件的 `file_path` 存图片资源路径。
-- admin 稿件管理新增稿件类型筛选，图片稿件详情展示图片预览，不初始化视频播放器。
+- 后端复用 `video_info_post` 保存稿件基础信息，复用 `video_info_file_post` 保存图片附件，图片附件的 `file_path` 存图片资源路径，并为每张图片生成内部 `upload_id` 以满足附件表唯一键。
+- admin 稿件管理顶部新增 `视频投稿` / `图片投稿` tab 筛选，图片稿件详情展示图片预览，不初始化视频播放器。
 
 ## 核心改动文件
 

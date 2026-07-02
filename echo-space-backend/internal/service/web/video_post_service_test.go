@@ -1,6 +1,7 @@
 package web
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,6 +91,51 @@ func TestValidateImagePostInput(t *testing.T) {
 	unsafe.ImageList = []ImagePostUploadFile{{SourceName: "../image.png", FileName: "图片"}}
 	if err := validateVideoPostInput(unsafe); err == nil {
 		t.Fatal("expected unsafe image validation error")
+	}
+}
+
+func TestBuildImageFilesGeneratesUniqueUploadIDs(t *testing.T) {
+	resourceRoot := t.TempDir()
+	sourceNames := []string{
+		"images/202607/first.png",
+		"images/202607/second.jpg",
+	}
+	for _, sourceName := range sourceNames {
+		targetPath := filepath.Join(resourceRoot, filepath.FromSlash(sourceName))
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			t.Fatalf("mkdir image directory: %v", err)
+		}
+		if err := os.WriteFile(targetPath, []byte("image"), 0644); err != nil {
+			t.Fatalf("write image file: %v", err)
+		}
+	}
+
+	generatedCount := 0
+	service := &VideoPostService{
+		resourceRoot: resourceRoot,
+		generateID: func(length int) (string, error) {
+			generatedCount++
+			return strings.Repeat(string(rune('A'+generatedCount)), length), nil
+		},
+	}
+	files, err := service.buildImageFiles("5171840855", "Abc123Def4", []ImagePostUploadFile{
+		{SourceName: sourceNames[0], FileName: "第一张"},
+		{SourceName: sourceNames[1], FileName: "第二张"},
+	}, 1)
+	if err != nil {
+		t.Fatalf("buildImageFiles returned error: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("len(files) = %d, want 2", len(files))
+	}
+	if files[0].UploadID == "" || files[1].UploadID == "" {
+		t.Fatal("image file upload id should not be empty")
+	}
+	if files[0].UploadID == files[1].UploadID {
+		t.Fatal("image file upload id should be unique per image")
+	}
+	if files[0].TransferResult != domain.VideoFileTransferSuccess || files[1].TransferResult != domain.VideoFileTransferSuccess {
+		t.Fatal("image files should be stored as transfer success")
 	}
 }
 

@@ -445,6 +445,10 @@ func (s *VideoPostService) buildImageFiles(userID string, videoID string, list [
 		if err != nil {
 			return nil, err
 		}
+		uploadID, err := s.generateID(uploadIDLength)
+		if err != nil {
+			return nil, err
+		}
 		filePath := item.SourceName
 		duration := 0
 		fileSize := fileInfo.Size()
@@ -457,7 +461,7 @@ func (s *VideoPostService) buildImageFiles(userID string, videoID string, list [
 			fileIndex = startIndex + index
 		}
 		files = append(files, domain.VideoInfoFilePost{
-			FileID: fileID, UserID: userID, VideoID: videoID,
+			FileID: fileID, UploadID: uploadID, UserID: userID, VideoID: videoID,
 			FileIndex: fileIndex, FileName: fileName, FileSize: &fileSize, FilePath: &filePath,
 			UpdateType: domain.VideoFileUpdateAdded, TransferResult: domain.VideoFileTransferSuccess,
 			Duration: &duration,
