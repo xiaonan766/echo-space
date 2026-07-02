@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"gorm.io/gorm"
+
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	searchinfra "github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/search"
@@ -28,6 +30,7 @@ type VideoInfoListInput struct {
 	CategoryID     int
 	Status         *int
 	RecommendType  *int
+	ContentType    *int
 }
 
 type AuditVideoInput struct {
@@ -71,6 +74,7 @@ func (s *VideoInfoService) LoadVideoList(ctx context.Context, input VideoInfoLis
 		CategoryID:     input.CategoryID,
 		Status:         input.Status,
 		RecommendType:  input.RecommendType,
+		ContentType:    input.ContentType,
 	})
 	if err != nil {
 		return domain.PaginationResult[domain.AdminVideoPostItem]{}, err
@@ -122,7 +126,15 @@ func (s *VideoInfoService) AuditVideo(ctx context.Context, input AuditVideoInput
 	}
 	setting = domain.NormalizeSysSetting(setting)
 
-	err := s.videoPostRepository.AuditVideo(ctx, repository.AuditVideoData{
+	post, err := s.videoPostRepository.FindPostByID(ctx, input.VideoID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &BusinessError{Info: "稿件不存在"}
+	}
+	if err != nil {
+		return err
+	}
+
+	err = s.videoPostRepository.AuditVideo(ctx, repository.AuditVideoData{
 		VideoID:            input.VideoID,
 		Status:             input.Status,
 		PostVideoCoinCount: setting.PostVideoCoinCount,
@@ -132,6 +144,9 @@ func (s *VideoInfoService) AuditVideo(ctx context.Context, input AuditVideoInput
 	}
 	if errors.Is(err, repository.ErrVideoNoPublishableFiles) {
 		return &BusinessError{Info: "\u89c6\u9891\u6587\u4ef6\u4e0d\u5b58\u5728\u6216\u672a\u8f6c\u7801\u5b8c\u6210"}
+	}
+	if err == nil && post.ContentType == domain.ContentTypeImage {
+		return nil
 	}
 	if err == nil && input.Status == domain.VideoPostStatusApproved {
 		if s.downloadGenerator != nil {
@@ -194,6 +209,9 @@ func normalizeVideoInfoListInput(input VideoInfoListInput) VideoInfoListInput {
 	}
 	if input.RecommendType != nil && (*input.RecommendType != 0 && *input.RecommendType != 1) {
 		input.RecommendType = nil
+	}
+	if input.ContentType != nil && (*input.ContentType != domain.ContentTypeVideo && *input.ContentType != domain.ContentTypeImage) {
+		input.ContentType = nil
 	}
 	return input
 }

@@ -33,6 +33,11 @@ func (h *VideoInfoHandler) LoadVideoList(c *gin.Context) {
 		response.BusinessError(c, "参数错误", nil)
 		return
 	}
+	contentType, ok := parseOptionalContentType(formOrQuery(c, "contentType"))
+	if !ok {
+		response.BusinessError(c, "参数错误", nil)
+		return
+	}
 
 	result, err := h.videoInfoService.LoadVideoList(c.Request.Context(), adminservice.VideoInfoListInput{
 		PageNo:         parseIntWithDefault(formOrQuery(c, "pageNo"), 1),
@@ -42,6 +47,7 @@ func (h *VideoInfoHandler) LoadVideoList(c *gin.Context) {
 		CategoryID:     parseIntWithDefault(formOrQuery(c, "categoryId"), 0),
 		Status:         status,
 		RecommendType:  recommendType,
+		ContentType:    contentType,
 	})
 	if err != nil {
 		log.Printf("admin load video list: %v", err)
@@ -138,4 +144,17 @@ func parseOptionalRecommendType(value string) (*int, bool) {
 		return nil, false
 	}
 	return &recommendType, true
+}
+
+func parseOptionalContentType(value string) (*int, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, true
+	}
+
+	contentType, err := strconv.Atoi(value)
+	if err != nil || (contentType != 0 && contentType != 1) {
+		return nil, false
+	}
+	return &contentType, true
 }

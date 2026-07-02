@@ -10,22 +10,22 @@
     <div class="video-detail">
       <div class="video-info">
         <el-tabs v-model="activeName">
-          <el-tab-pane label="视频分P" name="video">
-            <div class="video-tips">红色标题代表视频有更新</div>
+          <el-tab-pane :label="isImagePost ? '图片列表' : '视频分P'" name="video">
+            <div class="video-tips" v-if="!isImagePost">红色标题代表视频有更新</div>
             <el-scrollbar :max-height="400" class="video-list">
               <div
                 :class="['video-item', index == currentP - 1 ? 'active' : '']"
                 v-for="(item, index) in videoFileList"
-                @click="selectVideo(index + 1)"
+                @click="selectFile(index + 1)"
               >
-                <div class="playing" v-if="index == currentP - 1"></div>
+                <div class="playing" v-if="!isImagePost && index == currentP - 1"></div>
                 <div
                   :class="['title', item.updateType == 1 ? 'update' : '']"
                   :title="item.title"
                 >
-                  P{{ index + 1 }} {{ item.fileName }}
+                  {{ isImagePost ? `图${index + 1}` : `P${index + 1}` }} {{ item.fileName }}
                 </div>
-                <div class="duration">
+                <div class="duration" v-if="!isImagePost">
                   {{ proxy.Utils.convertSecondsToHMS(item.duration) }}
                 </div>
               </div>
@@ -65,7 +65,17 @@
         </el-tabs>
       </div>
       <div class="video-play">
-        <Player ref="playerRef" :autoplay="false"></Player>
+        <Player v-if="!isImagePost" ref="playerRef" :autoplay="false"></Player>
+        <div class="image-preview" v-else>
+          <Cover
+            v-if="currentImage"
+            :source="currentImage.filePath"
+            fit="contain"
+            :preview="true"
+            :lazy="false"
+          ></Cover>
+          <NoData v-else msg="暂无图片"></NoData>
+        </div>
       </div>
     </div>
   </Dialog>
@@ -73,7 +83,7 @@
 
 <script setup>
 import { mitter } from "@/eventbus/eventBus.js";
-import { ref, reactive, getCurrentInstance, nextTick } from "vue";
+import { computed, ref, reactive, getCurrentInstance, nextTick } from "vue";
 const { proxy } = getCurrentInstance();
 import { useRoute, useRouter } from "vue-router";
 const route = useRoute();
@@ -87,6 +97,8 @@ const activeName = ref("video");
 
 const videoInfo = ref();
 const videoFileList = ref([]);
+const isImagePost = computed(() => videoInfo.value?.contentType == 1);
+const currentImage = computed(() => videoFileList.value[currentP.value - 1]);
 //播放器
 const playerRef = ref();
 //当前播放的视频
@@ -94,6 +106,7 @@ const currentP = ref(1);
 const show = (data) => {
   dialogConfig.value.show = true;
   videoInfo.value = Object.assign({}, data);
+  activeName.value = "video";
   currentP.value = 1;
   loadPList();
 };
@@ -109,24 +122,35 @@ const loadPList = async () => {
     return;
   }
   videoFileList.value = result.data;
+  if (isImagePost.value) {
+    return;
+  }
   nextTick(() => {
     playerRef.value.showPlayer(window.innerHeight - 150);
     selectVideoFile();
   });
 };
 
-const selectVideo = (index) => {
+const selectFile = (index) => {
   currentP.value = index;
+  if (isImagePost.value) {
+    return;
+  }
   selectVideoFile();
 };
 
 const selectVideoFile = () => {
+  if (!videoFileList.value[currentP.value - 1]) {
+    return;
+  }
   mitter.emit("changeP", videoFileList.value[currentP.value - 1].fileId);
 };
 
 const closeWin = () => {
   dialogConfig.value.show = false;
-  playerRef.value.destroyPlayer();
+  if (!isImagePost.value) {
+    playerRef.value?.destroyPlayer();
+  }
 };
 
 defineExpose({
@@ -199,6 +223,13 @@ defineExpose({
   }
   .video-play {
     flex: 1;
+    min-width: 0;
+    .image-preview {
+      height: calc(100vh - 150px);
+      background: #f6f7f8;
+      border-radius: 6px;
+      overflow: hidden;
+    }
   }
 }
 </style>

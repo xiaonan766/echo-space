@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 )
 
 func TestValidateVideoPostInput(t *testing.T) {
@@ -55,6 +57,39 @@ func TestBuildVideoPostKeepsDownloadPermission(t *testing.T) {
 	post := buildVideoPost(input, "Abc123Def4", time.Now(), 0)
 	if post.DownloadPermission != 0 {
 		t.Fatalf("DownloadPermission = %d, want 0", post.DownloadPermission)
+	}
+}
+
+func TestValidateImagePostInput(t *testing.T) {
+	valid := normalizeVideoPostInput(SaveVideoPostInput{
+		UserID: "5171840855", VideoName: "测试图片投稿", PCategoryID: 60, PostType: 0,
+		ContentType: domain.ContentTypeImage, Tags: "图片,测试", DownloadPermission: 1,
+		ImageList: []ImagePostUploadFile{{SourceName: "images/202607/image.png", FileName: "第一张"}},
+	})
+	if err := validateVideoPostInput(valid); err != nil {
+		t.Fatalf("valid image input returned error: %v", err)
+	}
+	if valid.VideoCover != "images/202607/image.png" {
+		t.Fatalf("VideoCover = %q, want first image", valid.VideoCover)
+	}
+
+	tooMany := valid
+	tooMany.ImageList = make([]ImagePostUploadFile, maxImagePostCount+1)
+	for index := range tooMany.ImageList {
+		tooMany.ImageList[index] = ImagePostUploadFile{
+			SourceName: "images/202607/image" + string(rune('a'+index)) + ".png",
+			FileName:   "图片",
+		}
+	}
+	if err := validateVideoPostInput(tooMany); err == nil {
+		t.Fatal("expected too many image validation error")
+	}
+
+	unsafe := valid
+	unsafe.VideoCover = "../image.png"
+	unsafe.ImageList = []ImagePostUploadFile{{SourceName: "../image.png", FileName: "图片"}}
+	if err := validateVideoPostInput(unsafe); err == nil {
+		t.Fatal("expected unsafe image validation error")
 	}
 }
 

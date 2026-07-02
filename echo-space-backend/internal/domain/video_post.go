@@ -3,6 +3,11 @@ package domain
 import "time"
 
 const (
+	ContentTypeVideo = 0
+	ContentTypeImage = 1
+)
+
+const (
 	VideoPostStatusTranscoding    = 0
 	VideoPostStatusTransferFailed = 1
 	VideoPostStatusPendingReview  = 2
@@ -47,6 +52,7 @@ type VideoInfoPost struct {
 	LastUpdateTime     time.Time `gorm:"column:last_update_time"`
 	PCategoryID        int       `gorm:"column:p_category_id"`
 	CategoryID         *int      `gorm:"column:category_id"`
+	ContentType        int       `gorm:"column:content_type"`
 	Status             int       `gorm:"column:status"`
 	PostType           int       `gorm:"column:post_type"`
 	OriginInfo         *string   `gorm:"column:origin_info"`
@@ -100,6 +106,7 @@ type UcenterVideoPostItem struct {
 	LastUpdateTime     string `gorm:"column:last_update_time" json:"lastUpdateTime"`
 	PCategoryID        int    `gorm:"column:p_category_id" json:"pCategoryId"`
 	CategoryID         *int   `gorm:"column:category_id" json:"categoryId"`
+	ContentType        int    `gorm:"column:content_type" json:"contentType"`
 	Status             int    `gorm:"column:status" json:"status"`
 	StatusName         string `gorm:"-" json:"statusName"`
 	PostType           int    `gorm:"column:post_type" json:"postType"`
@@ -128,6 +135,7 @@ type AdminVideoPostItem struct {
 	LastUpdateTime     string `gorm:"column:last_update_time" json:"lastUpdateTime"`
 	PCategoryID        int    `gorm:"column:p_category_id" json:"pCategoryId"`
 	CategoryID         *int   `gorm:"column:category_id" json:"categoryId"`
+	ContentType        int    `gorm:"column:content_type" json:"contentType"`
 	Status             int    `gorm:"column:status" json:"status"`
 	StatusName         string `gorm:"-" json:"statusName"`
 	PostType           int    `gorm:"column:post_type" json:"postType"`

@@ -67,6 +67,7 @@ type UcenterVideoPostListQuery struct {
 	PageSize       int
 	VideoNameFuzzy string
 	Status         *int
+	ContentType    *int
 }
 
 type AdminVideoPostListQuery struct {
@@ -77,6 +78,7 @@ type AdminVideoPostListQuery struct {
 	CategoryID     int
 	Status         *int
 	RecommendType  *int
+	ContentType    *int
 }
 
 func NewVideoPostRepository(db *gorm.DB) *VideoPostRepository {
@@ -99,6 +101,16 @@ func (r *VideoPostRepository) FindPostWithFiles(ctx context.Context, videoID str
 		return nil, nil, err
 	}
 	return &post, files, nil
+}
+
+func (r *VideoPostRepository) FindPostByID(ctx context.Context, videoID string) (*domain.VideoInfoPost, error) {
+	var post domain.VideoInfoPost
+	if err := r.db.WithContext(ctx).
+		Where("video_id = ?", videoID).
+		Take(&post).Error; err != nil {
+		return nil, err
+	}
+	return &post, nil
 }
 
 func (r *VideoPostRepository) ListPostFiles(ctx context.Context, videoID string) ([]domain.VideoInfoFilePostItem, error) {
@@ -171,6 +183,7 @@ func (r *VideoPostRepository) ListUserPostsByPage(ctx context.Context, query Uce
 			DATE_FORMAT(v.last_update_time, '%Y-%m-%d %H:%i:%s') AS last_update_time,
 			v.p_category_id,
 			v.category_id,
+			COALESCE(v.content_type, 0) AS content_type,
 			v.status,
 			v.post_type,
 			COALESCE(v.origin_info, '') AS origin_info,
@@ -202,6 +215,9 @@ func applyUcenterVideoPostFilter(db *gorm.DB, query UcenterVideoPostListQuery) *
 	db = db.Where("v.user_id = ?", query.UserID)
 	if strings.TrimSpace(query.VideoNameFuzzy) != "" {
 		db = db.Where("v.video_name LIKE ?", "%"+strings.TrimSpace(query.VideoNameFuzzy)+"%")
+	}
+	if query.ContentType != nil {
+		db = db.Where("COALESCE(v.content_type, 0) = ?", *query.ContentType)
 	}
 	if query.Status == nil {
 		return db
@@ -248,6 +264,7 @@ func (r *VideoPostRepository) ListAdminPostsByPage(ctx context.Context, query Ad
 			DATE_FORMAT(v.last_update_time, '%Y-%m-%d %H:%i:%s') AS last_update_time,
 			v.p_category_id,
 			v.category_id,
+			COALESCE(v.content_type, 0) AS content_type,
 			v.status,
 			v.post_type,
 			COALESCE(v.origin_info, '') AS origin_info,
@@ -290,6 +307,9 @@ func applyAdminVideoPostFilter(db *gorm.DB, query AdminVideoPostListQuery) *gorm
 	}
 	if query.RecommendType != nil {
 		db = db.Where("COALESCE(vi.recommend_type, 0) = ?", *query.RecommendType)
+	}
+	if query.ContentType != nil {
+		db = db.Where("COALESCE(v.content_type, 0) = ?", *query.ContentType)
 	}
 	return db
 }
@@ -336,6 +356,9 @@ func (r *VideoPostRepository) AuditVideo(ctx context.Context, data AuditVideoDat
 		var post domain.VideoInfoPost
 		if err := tx.Where("video_id = ?", data.VideoID).Take(&post).Error; err != nil {
 			return err
+		}
+		if post.ContentType == domain.ContentTypeImage {
+			return nil
 		}
 
 		var postFiles []domain.VideoInfoFilePost
@@ -456,6 +479,7 @@ func (r *VideoPostRepository) UpdatePost(ctx context.Context, data SaveEditedVid
 			"last_update_time":    data.Post.LastUpdateTime,
 			"p_category_id":       data.Post.PCategoryID,
 			"category_id":         data.Post.CategoryID,
+			"content_type":        data.Post.ContentType,
 			"status":              data.Post.Status,
 			"post_type":           data.Post.PostType,
 			"origin_info":         data.Post.OriginInfo,

@@ -2,20 +2,22 @@
   <div class="video-item" ref="videoItemRef">
     <div class="video-cover">
       <Cover :source="data.videoCover"></Cover>
-      <div class="duration">
+      <div class="duration" v-if="!isImagePost">
         {{ proxy.Utils.convertSecondsToHMS(data.duration) }}
       </div>
+      <div class="duration" v-else>图片</div>
     </div>
     <div class="video-info">
       <div class="video-name">
         <span v-if="data.status != 3">{{ data.videoName }}</span>
         <router-link
-          v-else
+          v-else-if="!isImagePost"
           :to="`/video/${data.videoId}`"
           class="a-link"
           target="_blank"
           >{{ data.videoName }}</router-link
         >
+        <span v-else>{{ data.videoName }}</span>
         <span
           v-if="data.status == 0 || data.status == 2"
           class="status waiting"
@@ -72,7 +74,7 @@
               <div class="iconfont icon-edit"></div>
               <div class="title">编辑稿件</div>
             </div>
-            <div class="more-edit-item" @click="jump('danmu')">
+            <div class="more-edit-item" v-if="!isImagePost" @click="jump('danmu')">
               <div class="iconfont icon-danmu"></div>
               <div class="title">弹幕管理</div>
             </div>
@@ -80,7 +82,7 @@
               <div class="iconfont icon-hudong"></div>
               <div class="title">评论管理</div>
             </div>
-            <div class="interaction-op">
+            <div class="interaction-op" v-if="!isImagePost">
               <el-checkbox-group
                 v-model="interactionInfo"
                 @change="saveInteractionInfo"
@@ -122,6 +124,7 @@ const props = defineProps({
     default: {},
   },
 });
+const isImagePost = computed(() => props.data.contentType == 1);
 const interactionInfo = ref(
   props.data.interaction ? props.data.interaction.split(",") : []
 );

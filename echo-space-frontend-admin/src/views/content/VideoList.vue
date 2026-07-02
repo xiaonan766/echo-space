@@ -3,8 +3,20 @@
     <el-card>
       <el-form :model="searchForm" label-width="70px" label-position="right">
         <el-row>
+          <el-col :span="4">
+            <el-form-item label="稿件类型">
+              <el-select
+                placeholder="请选择稿件类型"
+                v-model="searchForm.contentType"
+                @change="handleContentTypeChange"
+              >
+                <el-option :value="0" label="视频"></el-option>
+                <el-option :value="1" label="图片"></el-option>
+              </el-select>
+            </el-form-item>
+          </el-col>
           <el-col :span="5">
-            <el-form-item label="视频名称">
+            <el-form-item label="稿件名称">
               <el-input
                 class="password-input"
                 v-model="searchForm.videoNameFuzzy"
@@ -30,7 +42,7 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="5">
+          <el-col :span="5" v-if="searchForm.contentType == 0">
             <el-form-item label="推荐">
               <!-- 下拉框 -->
               <el-select
@@ -62,15 +74,19 @@
       <template #videoCover="{ index, row }">
         <div class="cover-info">
           <Cover :source="row.videoCover" :width="160"></Cover>
-          <div class="duration">
+          <div class="duration" v-if="row.contentType == 0">
             {{ proxy.Utils.convertSecondsToHMS(row.duration) }}
           </div>
+          <div class="duration" v-else>图片</div>
         </div>
       </template>
 
       <template #videoName="{ index, row }">
         <div class="video-info">
-          <div class="video-name">{{ row.videoName }}</div>
+          <div class="video-name">
+            {{ row.videoName }}
+            <span class="content-type-tag">{{ row.contentType == 1 ? "图片" : "视频" }}</span>
+          </div>
           <div class="user-name iconfont icon-upzhu">{{ row.nickName }}</div>
           <div class="video-count">
             <span class="iconfont icon-play-solid">{{ row.playCount }}</span>
@@ -94,7 +110,7 @@
       </template>
 
       <template #recommendType="{ row, index }">
-        {{ row.recommendType == 1 ? "已推荐" : "未推荐" }}
+        {{ row.contentType == 1 ? "-" : row.recommendType == 1 ? "已推荐" : "未推荐" }}
       </template>
 
       <template #slotOperation="{ index, row }">
@@ -112,7 +128,7 @@
             >
             <el-divider direction="vertical" />
           </template>
-          <template v-if="row.status == 3">
+          <template v-if="row.status == 3 && row.contentType == 0">
             <a
               class="a-link"
               href="javascript:void(0)"
@@ -145,7 +161,9 @@ const userInfo = ref(
   JSON.parse(sessionStorage.getItem("userInfo")) || { menuList: [] }
 );
 
-const searchForm = ref({});
+const searchForm = ref({
+  contentType: 0,
+});
 
 const tableData = ref({});
 const tableOptions = ref({
@@ -168,7 +186,7 @@ const columns = [
     scopedSlots: "videoCover",
   },
   {
-    label: "视频信息",
+    label: "稿件信息",
     prop: "videoName",
     scopedSlots: "videoName",
   },
@@ -198,6 +216,14 @@ const columns = [
 ];
 
 const tableInfoRef = ref();
+
+const handleContentTypeChange = () => {
+  if (searchForm.value.contentType == 1) {
+    searchForm.value.recommendType = undefined;
+  }
+  tableData.value.pageNo = 1;
+  loadDataList();
+};
 
 const loadDataList = async () => {
   let params = {
@@ -309,6 +335,15 @@ const recommend = (data) => {
   }
 }
 .video-info {
+  .content-type-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: #eef6ff;
+    color: #409eff;
+    font-size: 12px;
+  }
   .user-name {
     margin-top: 5px;
     color: var(--text3);

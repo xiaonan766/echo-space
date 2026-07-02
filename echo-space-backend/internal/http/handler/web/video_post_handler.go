@@ -36,6 +36,15 @@ func (h *VideoPostHandler) PostVideo(c *gin.Context) {
 		response.BusinessError(c, "\u8bf7\u9009\u62e9\u6b63\u786e\u7684\u6295\u7a3f\u7c7b\u578b", nil)
 		return
 	}
+	contentType := 0
+	if value := strings.TrimSpace(c.PostForm("contentType")); value != "" {
+		parsed, parseErr := strconv.Atoi(value)
+		if parseErr != nil || (parsed != 0 && parsed != 1) {
+			response.BusinessError(c, "请选择正确的稿件类型", nil)
+			return
+		}
+		contentType = parsed
+	}
 	downloadPermission := 1
 	if value := strings.TrimSpace(c.PostForm("downloadPermission")); value != "" {
 		parsed, parseErr := strconv.Atoi(value)
@@ -57,17 +66,27 @@ func (h *VideoPostHandler) PostVideo(c *gin.Context) {
 
 	var uploadFileList []webservice.VideoPostUploadFile
 	if err := json.Unmarshal([]byte(c.PostForm("uploadFileList")), &uploadFileList); err != nil {
-		response.BusinessError(c, "\u89c6\u9891\u6587\u4ef6\u5217\u8868\u683c\u5f0f\u4e0d\u6b63\u786e", nil)
-		return
+		if contentType == 0 {
+			response.BusinessError(c, "\u89c6\u9891\u6587\u4ef6\u5217\u8868\u683c\u5f0f\u4e0d\u6b63\u786e", nil)
+			return
+		}
+	}
+	var imageList []webservice.ImagePostUploadFile
+	if contentType == 1 {
+		if err := json.Unmarshal([]byte(c.PostForm("imageList")), &imageList); err != nil {
+			response.BusinessError(c, "图片列表格式不正确", nil)
+			return
+		}
 	}
 	_, err = h.service.SaveVideoPost(c.Request.Context(), webservice.SaveVideoPostInput{
 		UserID: tokenUserInfo.UserID, VideoID: c.PostForm("videoId"),
 		VideoCover: c.PostForm("videoCover"), VideoName: c.PostForm("videoName"),
-		PCategoryID: pCategoryID, CategoryID: categoryID, PostType: postType,
+		PCategoryID: pCategoryID, CategoryID: categoryID, ContentType: contentType, PostType: postType,
 		OriginInfo: c.PostForm("originInfo"), Tags: c.PostForm("tags"),
 		Introduction: c.PostForm("introduction"), Interaction: c.PostForm("interaction"),
 		DownloadPermission: downloadPermission,
 		UploadFileList:     uploadFileList,
+		ImageList:          imageList,
 	})
 	if err != nil {
 		if businessError, ok := webservice.IsBusinessError(err); ok {
@@ -102,6 +121,7 @@ func (h *VideoPostHandler) LoadVideoList(c *gin.Context) {
 		PageSize:       parseWebIntWithDefault(formOrQuery(c, "pageSize"), 15),
 		VideoNameFuzzy: formOrQuery(c, "videoNameFuzzy"),
 		Status:         status,
+		ContentType:    parseOptionalWebInt(formOrQuery(c, "contentType")),
 	})
 	if err != nil {
 		if businessError, ok := webservice.IsBusinessError(err); ok {
