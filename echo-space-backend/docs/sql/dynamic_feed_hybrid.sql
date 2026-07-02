@@ -3,10 +3,10 @@
 
 CREATE TABLE IF NOT EXISTS dynamic_event (
     event_id VARCHAR(32) NOT NULL COMMENT 'event id',
-    video_id VARCHAR(10) NOT NULL COMMENT 'video id',
+    video_id VARCHAR(10) NOT NULL COMMENT 'content id',
     author_user_id VARCHAR(10) NOT NULL COMMENT 'author user id',
     dynamic_time DATETIME NOT NULL COMMENT 'dynamic display time',
-    event_type TINYINT NOT NULL DEFAULT 1 COMMENT 'event type 1: video published',
+    event_type TINYINT NOT NULL DEFAULT 1 COMMENT 'event type 1: video, 2: image',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (event_id),
@@ -19,21 +19,22 @@ CREATE TABLE IF NOT EXISTS user_dynamic_feed (
     feed_id VARCHAR(32) NOT NULL COMMENT 'feed id',
     user_id VARCHAR(10) NOT NULL COMMENT 'receiver user id',
     author_user_id VARCHAR(10) NOT NULL COMMENT 'author user id',
-    video_id VARCHAR(10) NOT NULL COMMENT 'video id',
+    video_id VARCHAR(10) NOT NULL COMMENT 'content id',
+    event_type TINYINT NOT NULL DEFAULT 1 COMMENT 'event type 1: video, 2: image',
     dynamic_time DATETIME NOT NULL COMMENT 'dynamic display time',
     push_time DATETIME NOT NULL COMMENT 'fanout time',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (feed_id),
-    UNIQUE KEY uk_user_dynamic_video (user_id, video_id),
-    KEY idx_user_dynamic_time (user_id, dynamic_time, video_id),
-    KEY idx_user_author_dynamic_time (user_id, author_user_id, dynamic_time, video_id)
+    UNIQUE KEY uk_user_dynamic_content (user_id, event_type, video_id),
+    KEY idx_user_dynamic_time (user_id, dynamic_time, event_type, video_id),
+    KEY idx_user_author_dynamic_time (user_id, author_user_id, dynamic_time, event_type, video_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='user dynamic feed inbox';
 
 CREATE TABLE IF NOT EXISTS dynamic_feed_message (
     message_id VARCHAR(32) NOT NULL COMMENT 'message id',
     event_id VARCHAR(32) NOT NULL COMMENT 'event id',
-    video_id VARCHAR(10) NOT NULL COMMENT 'video id',
+    video_id VARCHAR(10) NOT NULL COMMENT 'content id',
     author_user_id VARCHAR(10) NOT NULL COMMENT 'author user id',
     message_status TINYINT NOT NULL DEFAULT 0 COMMENT '0 wait publish 1 published 2 processing 3 success 4 retry wait 5 dead',
     payload JSON NOT NULL COMMENT 'message payload',
@@ -70,13 +71,14 @@ ON DUPLICATE KEY UPDATE
     update_time = NOW();
 
 INSERT INTO user_dynamic_feed (
-    feed_id, user_id, author_user_id, video_id, dynamic_time, push_time, create_time, update_time
+    feed_id, user_id, author_user_id, video_id, event_type, dynamic_time, push_time, create_time, update_time
 )
 SELECT
     CONCAT(uf.user_id, '_', vi.video_id),
     uf.user_id,
     vi.user_id,
     vi.video_id,
+    1,
     vi.last_update_time,
     NOW(),
     NOW(),
@@ -86,5 +88,6 @@ INNER JOIN video_info vi ON vi.user_id = uf.focus_user_id
 WHERE uf.focus_time <= vi.last_update_time
 ON DUPLICATE KEY UPDATE
     author_user_id = VALUES(author_user_id),
+    event_type = VALUES(event_type),
     dynamic_time = VALUES(dynamic_time),
     update_time = NOW();

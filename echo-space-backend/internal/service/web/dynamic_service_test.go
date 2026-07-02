@@ -84,6 +84,7 @@ func TestLoadDynamicFeedBuildsNextCursor(t *testing.T) {
 	}
 	wantCursor := dynamicCursorPayload{
 		LastUpdateTime: "2026-06-25 10:02:00",
+		LastContentID:  "Video00002",
 		LastVideoID:    "Video00002",
 	}
 	if !reflect.DeepEqual(cursor, wantCursor) {
@@ -115,7 +116,9 @@ func TestLoadDynamicFeedUsesCursorAndFocusUser(t *testing.T) {
 	if repo.lastQuery.FocusUserID != "1000000002" {
 		t.Fatalf("focus user id = %s, want 1000000002", repo.lastQuery.FocusUserID)
 	}
-	if repo.lastQuery.LastUpdateTime != "2026-06-25 10:02:00" || repo.lastQuery.LastVideoID != "Video00002" {
+	if repo.lastQuery.LastUpdateTime != "2026-06-25 10:02:00" ||
+		repo.lastQuery.LastContentType != domain.ContentTypeVideo ||
+		repo.lastQuery.LastContentID != "Video00002" {
 		t.Fatalf("cursor query = %#v, want last update/video cursor", repo.lastQuery)
 	}
 }
@@ -177,6 +180,48 @@ func TestLoadDynamicFeedUsesRedisZSetCache(t *testing.T) {
 	}
 	if result.List[1].PlayTime != "01:01" {
 		t.Fatalf("playTime = %s, want 01:01", result.List[1].PlayTime)
+	}
+}
+
+func TestLoadDynamicFeedUsesRedisCacheForMixedContent(t *testing.T) {
+	repo := &fakeDynamicRepository{
+		detailByID: map[string]domain.WebVideoItem{
+			"Video00003": {
+				VideoID: "Video00003", ContentID: "Video00003", ContentType: domain.ContentTypeVideo,
+				UserID: "2000000001", LastUpdateTime: "2026-06-25 10:03:00", Duration: 65,
+			},
+			"1:Image00002": {
+				VideoID: "Image00002", ContentID: "Image00002", ContentType: domain.ContentTypeImage,
+				ContentName: "图片动态", UserID: "2000000001", LastUpdateTime: "2026-06-25 10:02:00",
+			},
+		},
+	}
+	feedCache := &fakeDynamicFeedCache{
+		page: cache.DynamicFeedCachePage{
+			Hit: true,
+			Items: []cache.DynamicFeedCacheItem{
+				{VideoID: "Video00003", Score: 1782352980000},
+				{ContentType: domain.ContentTypeImage, ContentID: "Image00002", VideoID: "Image00002", Score: 1782352920000},
+			},
+		},
+	}
+	service := NewDynamicService(repo, feedCache)
+
+	result, err := service.LoadFeed(context.Background(), LoadDynamicFeedInput{
+		UserID:   "1000000001",
+		PageSize: 10,
+	})
+	if err != nil {
+		t.Fatalf("load feed returned error: %v", err)
+	}
+	if len(result.List) != 2 {
+		t.Fatalf("feed len = %d, want 2", len(result.List))
+	}
+	if result.List[0].ContentType != domain.ContentTypeVideo || result.List[1].ContentType != domain.ContentTypeImage {
+		t.Fatalf("content types = %d,%d, want video,image", result.List[0].ContentType, result.List[1].ContentType)
+	}
+	if result.List[1].ContentID != "Image00002" || result.List[1].ContentName != "图片动态" {
+		t.Fatalf("image feed item = %#v, want image content fields", result.List[1])
 	}
 }
 
@@ -258,8 +303,8 @@ func TestLoadDynamicFeedRemovesDirtyRedisVideoID(t *testing.T) {
 	if len(result.List) != 1 || result.List[0].VideoID != "Video00002" {
 		t.Fatalf("feed list = %#v, want Video00002", result.List)
 	}
-	if len(feedCache.removedVideoIDs) != 1 || feedCache.removedVideoIDs[0] != "Deleted001" {
-		t.Fatalf("removed video ids = %#v, want Deleted001", feedCache.removedVideoIDs)
+	if len(feedCache.removedItems) != 1 || feedCache.removedItems[0].VideoID != "Deleted001" {
+		t.Fatalf("removed items = %#v, want Deleted001", feedCache.removedItems)
 	}
 }
 
@@ -288,10 +333,19 @@ func (r *fakeDynamicRepository) ListFeedByCursor(ctx context.Context, query repo
 	return r.feed, nil
 }
 
-func (r *fakeDynamicRepository) ListFeedVideoDetailsByIDs(ctx context.Context, videoIDs []string) ([]domain.WebVideoItem, error) {
-	list := make([]domain.WebVideoItem, 0, len(videoIDs))
-	for _, videoID := range videoIDs {
-		if item, ok := r.detailByID[videoID]; ok {
+func (r *fakeDynamicRepository) ListFeedContentDetailsByKeys(ctx context.Context, keys []domain.DynamicFeedContentKey) ([]domain.WebVideoItem, error) {
+	list := make([]domain.WebVideoItem, 0, len(keys))
+	for _, key := range keys {
+		contentID := key.ContentID
+		if contentID == "" {
+			continue
+		}
+		detailKey := dynamicFeedItemKey(key.ContentType, contentID)
+		item, ok := r.detailByID[detailKey]
+		if !ok {
+			item, ok = r.detailByID[contentID]
+		}
+		if ok {
 			list = append(list, item)
 		}
 	}
@@ -305,11 +359,11 @@ func (r *fakeDynamicRepository) UpsertFeedItems(ctx context.Context, userID stri
 }
 
 type fakeDynamicFeedCache struct {
-	page            cache.DynamicFeedCachePage
-	addErr          error
-	addedUserID     string
-	addedItems      []cache.DynamicFeedCacheItem
-	removedVideoIDs []string
+	page         cache.DynamicFeedCachePage
+	addErr       error
+	addedUserID  string
+	addedItems   []cache.DynamicFeedCacheItem
+	removedItems []cache.DynamicFeedCacheItem
 }
 
 func (c *fakeDynamicFeedCache) ListFeedItems(ctx context.Context, userID string, authorUserID string, cursor cache.DynamicFeedCacheCursor, limit int) (cache.DynamicFeedCachePage, error) {
@@ -322,7 +376,7 @@ func (c *fakeDynamicFeedCache) AddFeedItems(ctx context.Context, userID string, 
 	return c.addErr
 }
 
-func (c *fakeDynamicFeedCache) RemoveFeedVideoIDs(ctx context.Context, userID string, authorUserID string, videoIDs []string) error {
-	c.removedVideoIDs = append([]string(nil), videoIDs...)
+func (c *fakeDynamicFeedCache) RemoveFeedItems(ctx context.Context, userID string, authorUserID string, items []cache.DynamicFeedCacheItem) error {
+	c.removedItems = append([]cache.DynamicFeedCacheItem(nil), items...)
 	return nil
 }

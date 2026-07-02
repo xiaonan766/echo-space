@@ -358,7 +358,7 @@ func (r *VideoPostRepository) AuditVideo(ctx context.Context, data AuditVideoDat
 			return err
 		}
 		if post.ContentType == domain.ContentTypeImage {
-			return nil
+			return createDynamicEventMessage(tx, post, domain.DynamicEventTypeImage)
 		}
 
 		var postFiles []domain.VideoInfoFilePost
@@ -420,7 +420,7 @@ func (r *VideoPostRepository) AuditVideo(ctx context.Context, data AuditVideoDat
 		if err := tx.Create(&files).Error; err != nil {
 			return err
 		}
-		return createDynamicEventMessage(tx, post)
+		return createDynamicEventMessage(tx, post, domain.DynamicEventTypeVideo)
 	})
 }
 
@@ -863,14 +863,15 @@ func trimVideoMessageError(err error) string {
 	return message
 }
 
-func createDynamicEventMessage(tx *gorm.DB, post domain.VideoInfoPost) error {
+func createDynamicEventMessage(tx *gorm.DB, post domain.VideoInfoPost, eventType int) error {
 	now := time.Now()
+	eventType = normalizeDynamicEventType(eventType)
 	event := domain.DynamicEvent{
-		EventID:      dynamicEventID(post.VideoID),
+		EventID:      dynamicEventID(eventType, post.VideoID),
 		VideoID:      post.VideoID,
 		AuthorUserID: post.UserID,
 		DynamicTime:  post.LastUpdateTime,
-		EventType:    domain.DynamicEventTypeVideo,
+		EventType:    eventType,
 		CreateTime:   now,
 		UpdateTime:   now,
 	}
@@ -916,7 +917,10 @@ func createDynamicEventMessage(tx *gorm.DB, post domain.VideoInfoPost) error {
 	}).Error
 }
 
-func dynamicEventID(videoID string) string {
+func dynamicEventID(eventType int, videoID string) string {
+	if eventType == domain.DynamicEventTypeImage {
+		return "image_" + strings.TrimSpace(videoID)
+	}
 	return "video_" + strings.TrimSpace(videoID)
 }
 

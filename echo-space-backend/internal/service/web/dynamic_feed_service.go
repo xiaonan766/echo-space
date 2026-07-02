@@ -186,6 +186,8 @@ func (s *DynamicFeedService) cacheFanoutFeed(ctx context.Context, message domain
 		return
 	}
 	err = s.feedCache.AddFeedItemForUsers(ctx, userIDs, cache.DynamicFeedCacheItem{
+		ContentType:  dynamicMessageContentType(message),
+		ContentID:    message.VideoID,
 		VideoID:      message.VideoID,
 		AuthorUserID: message.AuthorUserID,
 		Score:        cache.DynamicFeedScore(message.DynamicTime),
@@ -193,6 +195,13 @@ func (s *DynamicFeedService) cacheFanoutFeed(ctx context.Context, message domain
 	if err != nil {
 		log.Printf("write dynamic feed fanout cache failed: authorUserID=%s videoID=%s err=%v", message.AuthorUserID, message.VideoID, err)
 	}
+}
+
+func dynamicMessageContentType(message domain.DynamicFeedMessage) int {
+	if message.EventType == domain.DynamicEventTypeImage {
+		return domain.ContentTypeImage
+	}
+	return domain.ContentTypeVideo
 }
 
 func (s *DynamicFeedService) getAuthorPolicy(ctx context.Context, authorUserID string) (cache.DynamicAuthorPolicy, error) {

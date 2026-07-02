@@ -2,7 +2,7 @@
   <div class="dynamic-page">
     <div v-if="!isLoggedIn" class="login-panel">
       <div class="login-title">登录后查看关注动态</div>
-      <div class="login-tip">关注的博主发布公开视频后，会出现在这里。</div>
+      <div class="login-tip">关注的博主发布视频或图片后，会出现在这里。</div>
       <el-button type="primary" @click="handleLogin">立即登录</el-button>
     </div>
 
@@ -99,7 +99,7 @@
           <article
             class="feed-card"
             v-for="item in feedList"
-            :key="item.videoId"
+            :key="feedItemKey(item)"
           >
             <div class="feed-author">
               <Avatar
@@ -117,36 +117,36 @@
                   {{ item.nickName }}
                 </router-link>
                 <div class="publish-time">
-                  {{ formatTime(item.lastUpdateTime) }} 发布了视频
+                  {{ formatTime(item.lastUpdateTime) }} 发布了{{ contentTypeName(item) }}
                 </div>
               </div>
             </div>
             <div class="feed-content">
               <router-link
                 class="video-title"
-                :to="`/video/${item.videoId}`"
+                :to="contentLink(item)"
                 target="_blank"
               >
-                {{ item.videoName }}
+                {{ contentName(item) }}
               </router-link>
               <div class="video-introduction" v-if="item.introduction">
                 {{ item.introduction }}
               </div>
               <router-link
                 class="video-card"
-                :to="`/video/${item.videoId}`"
+                :to="contentLink(item)"
                 target="_blank"
               >
                 <div class="video-cover">
-                  <Cover :source="item.videoCover" fit="cover"></Cover>
-                  <div class="play-time">{{ item.playTime }}</div>
+                  <Cover :source="contentCover(item)" fit="cover"></Cover>
+                  <div class="play-time" v-if="!isImageContent(item)">{{ item.playTime }}</div>
                 </div>
                 <div class="video-info">
-                  <div class="video-name">{{ item.videoName }}</div>
+                  <div class="video-name">{{ contentName(item) }}</div>
                   <div class="video-desc">
-                    {{ item.introduction || '这个视频暂时没有简介' }}
+                    {{ item.introduction || emptyContentDesc(item) }}
                   </div>
-                  <div class="video-stats">
+                  <div class="video-stats" v-if="!isImageContent(item)">
                     <span class="iconfont icon-play2">{{
                       formatCount(item.playCount)
                     }}</span>
@@ -202,6 +202,7 @@ const loadingProfile = ref(false)
 const loadingUsers = ref(false)
 const loadingFeed = ref(false)
 const hasLoaded = ref(false)
+const CONTENT_TYPE_IMAGE = 1
 
 const currentUserId = computed(() => loginStore.userInfo.userId || '')
 const isLoggedIn = computed(() => currentUserId.value != '')
@@ -347,6 +348,27 @@ const formatCount = (count) => {
   }
   return count
 }
+
+const normalizeContentType = (item) => Number(item?.contentType || 0)
+
+const isImageContent = (item) => normalizeContentType(item) == CONTENT_TYPE_IMAGE
+
+const contentId = (item) => item?.contentId || item?.videoId || ''
+
+const contentName = (item) => item?.contentName || item?.videoName || ''
+
+const contentCover = (item) => item?.contentCover || item?.videoCover || ''
+
+const contentTypeName = (item) => (isImageContent(item) ? '图片' : '视频')
+
+const contentLink = (item) => {
+  const id = contentId(item)
+  return isImageContent(item) ? `/gallery/${id}` : `/video/${id}`
+}
+
+const emptyContentDesc = (item) => (isImageContent(item) ? '这个图片暂时没有简介' : '这个视频暂时没有简介')
+
+const feedItemKey = (item) => `${normalizeContentType(item)}_${contentId(item)}`
 </script>
 
 <style lang="scss" scoped>

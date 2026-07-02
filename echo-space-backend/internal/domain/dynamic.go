@@ -4,6 +4,7 @@ import "time"
 
 const (
 	DynamicEventTypeVideo = 1
+	DynamicEventTypeImage = 2
 )
 
 const (
@@ -39,6 +40,11 @@ type DynamicFeedPage struct {
 	HasMore    bool           `json:"hasMore"`
 }
 
+type DynamicFeedContentKey struct {
+	ContentType int
+	ContentID   string
+}
+
 type DynamicEvent struct {
 	EventID      string    `gorm:"column:event_id;primaryKey" json:"eventId"`
 	VideoID      string    `gorm:"column:video_id" json:"videoId"`
@@ -58,6 +64,7 @@ type UserDynamicFeed struct {
 	UserID       string    `gorm:"column:user_id" json:"userId"`
 	AuthorUserID string    `gorm:"column:author_user_id" json:"authorUserId"`
 	VideoID      string    `gorm:"column:video_id" json:"videoId"`
+	EventType    int       `gorm:"column:event_type" json:"eventType"`
 	DynamicTime  time.Time `gorm:"column:dynamic_time" json:"dynamicTime"`
 	PushTime     time.Time `gorm:"column:push_time" json:"pushTime"`
 	CreateTime   time.Time `gorm:"column:create_time" json:"createTime"`

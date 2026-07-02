@@ -13,6 +13,7 @@ import (
 
 const (
 	dynamicActiveUsersKey    = "echo-space:dynamic:active-users"
+	dynamicFeedImagePrefix   = "image:"
 	dynamicAuthorPolicyTTL   = 5 * time.Minute
 	dynamicFeedTTL           = 8 * 24 * time.Hour
 	dynamicFeedMaxAge        = 30 * 24 * time.Hour
@@ -31,15 +32,19 @@ type DynamicAuthorPolicy struct {
 }
 
 type DynamicFeedCacheItem struct {
+	ContentType  int
+	ContentID    string
 	VideoID      string
 	AuthorUserID string
 	Score        int64
 }
 
 type DynamicFeedCacheCursor struct {
-	HasCursor bool
-	Score     int64
-	VideoID   string
+	HasCursor   bool
+	Score       int64
+	ContentType int
+	ContentID   string
+	VideoID     string
 }
 
 type DynamicFeedCachePage struct {
@@ -194,20 +199,18 @@ func (s *DynamicActiveStore) ListFeedItems(ctx context.Context, userID string, a
 		}
 		offset += int64(len(zItems))
 		for _, zItem := range zItems {
-			videoID, ok := zItem.Member.(string)
+			member, ok := zItem.Member.(string)
 			if !ok {
 				continue
 			}
-			videoID = strings.TrimSpace(videoID)
+			item := dynamicFeedCacheItemFromMember(member)
 			score := int64(zItem.Score)
-			if videoID == "" || beforeOrAtDynamicCursor(score, videoID, cursor) {
+			if item.ContentID == "" || beforeOrAtDynamicCursor(score, item.ContentType, item.ContentID, cursor) {
 				continue
 			}
-			items = append(items, DynamicFeedCacheItem{
-				VideoID:      videoID,
-				AuthorUserID: authorUserID,
-				Score:        score,
-			})
+			item.AuthorUserID = authorUserID
+			item.Score = score
+			items = append(items, item)
 			if len(items) >= limit {
 				hasMore = true
 				break
@@ -239,9 +242,9 @@ func (s *DynamicActiveStore) AddFeedItems(ctx context.Context, userID string, it
 }
 
 func (s *DynamicActiveStore) AddFeedItemForUsers(ctx context.Context, userIDs []string, item DynamicFeedCacheItem) error {
-	item.VideoID = strings.TrimSpace(item.VideoID)
+	item = normalizeDynamicFeedCacheItem(item)
 	item.AuthorUserID = strings.TrimSpace(item.AuthorUserID)
-	if s == nil || s.redis == nil || item.VideoID == "" || item.Score <= 0 || len(userIDs) == 0 {
+	if s == nil || s.redis == nil || item.ContentID == "" || item.Score <= 0 || len(userIDs) == 0 {
 		return nil
 	}
 
@@ -269,17 +272,28 @@ func (s *DynamicActiveStore) AddFeedItemForUsers(ctx context.Context, userIDs []
 }
 
 func (s *DynamicActiveStore) RemoveFeedVideoIDs(ctx context.Context, userID string, authorUserID string, videoIDs []string) error {
-	userID = strings.TrimSpace(userID)
-	authorUserID = strings.TrimSpace(authorUserID)
-	if s == nil || s.redis == nil || userID == "" || len(videoIDs) == 0 {
-		return nil
-	}
-
-	members := make([]any, 0, len(videoIDs))
+	items := make([]DynamicFeedCacheItem, 0, len(videoIDs))
 	for _, videoID := range videoIDs {
 		videoID = strings.TrimSpace(videoID)
 		if videoID != "" {
-			members = append(members, videoID)
+			items = append(items, DynamicFeedCacheItem{VideoID: videoID})
+		}
+	}
+	return s.RemoveFeedItems(ctx, userID, authorUserID, items)
+}
+
+func (s *DynamicActiveStore) RemoveFeedItems(ctx context.Context, userID string, authorUserID string, items []DynamicFeedCacheItem) error {
+	userID = strings.TrimSpace(userID)
+	authorUserID = strings.TrimSpace(authorUserID)
+	if s == nil || s.redis == nil || userID == "" || len(items) == 0 {
+		return nil
+	}
+
+	members := make([]any, 0, len(items))
+	for _, item := range items {
+		item = normalizeDynamicFeedCacheItem(item)
+		if item.ContentID != "" {
+			members = append(members, dynamicFeedCacheMember(item))
 		}
 	}
 	if len(members) == 0 {
@@ -317,18 +331,19 @@ func dynamicFeedKey(userID string, authorUserID string) string {
 func addDynamicFeedItemsToPipe(ctx context.Context, pipe redis.Pipeliner, userID string, items []DynamicFeedCacheItem) {
 	cutoffScore := dynamicFeedTrimCutoffScore(time.Now())
 	for _, item := range items {
-		item.VideoID = strings.TrimSpace(item.VideoID)
+		item = normalizeDynamicFeedCacheItem(item)
 		item.AuthorUserID = strings.TrimSpace(item.AuthorUserID)
-		if item.VideoID == "" || item.Score <= 0 {
+		if item.ContentID == "" || item.Score <= 0 {
 			continue
 		}
+		member := dynamicFeedCacheMember(item)
 		fullKey := dynamicFeedKey(userID, "")
-		pipe.ZAdd(ctx, fullKey, redis.Z{Score: float64(item.Score), Member: item.VideoID})
+		pipe.ZAdd(ctx, fullKey, redis.Z{Score: float64(item.Score), Member: member})
 		pipe.Expire(ctx, fullKey, dynamicFeedTTL)
 		trimDynamicFeedKey(ctx, pipe, fullKey, cutoffScore)
 		if item.AuthorUserID != "" {
 			authorKey := dynamicFeedKey(userID, item.AuthorUserID)
-			pipe.ZAdd(ctx, authorKey, redis.Z{Score: float64(item.Score), Member: item.VideoID})
+			pipe.ZAdd(ctx, authorKey, redis.Z{Score: float64(item.Score), Member: member})
 			pipe.Expire(ctx, authorKey, dynamicFeedTTL)
 			trimDynamicFeedKey(ctx, pipe, authorKey, cutoffScore)
 		}
@@ -348,15 +363,73 @@ func dynamicFeedTrimCutoffScore(now time.Time) int64 {
 	return DynamicFeedScore(now.Add(-dynamicFeedMaxAge))
 }
 
-func beforeOrAtDynamicCursor(score int64, videoID string, cursor DynamicFeedCacheCursor) bool {
+func dynamicFeedCacheItemFromMember(member string) DynamicFeedCacheItem {
+	member = strings.TrimSpace(member)
+	if member == "" {
+		return DynamicFeedCacheItem{}
+	}
+	if strings.HasPrefix(member, dynamicFeedImagePrefix) {
+		contentID := strings.TrimSpace(strings.TrimPrefix(member, dynamicFeedImagePrefix))
+		return DynamicFeedCacheItem{ContentType: 1, ContentID: contentID, VideoID: contentID}
+	}
+	return DynamicFeedCacheItem{ContentType: 0, ContentID: member, VideoID: member}
+}
+
+func normalizeDynamicFeedCacheItem(item DynamicFeedCacheItem) DynamicFeedCacheItem {
+	item.VideoID = strings.TrimSpace(item.VideoID)
+	item.ContentID = strings.TrimSpace(item.ContentID)
+	if item.ContentID == "" {
+		item.ContentID = item.VideoID
+	}
+	if item.VideoID == "" {
+		item.VideoID = item.ContentID
+	}
+	if item.ContentType != 1 {
+		item.ContentType = 0
+	}
+	return item
+}
+
+func dynamicFeedCacheMember(item DynamicFeedCacheItem) string {
+	item = normalizeDynamicFeedCacheItem(item)
+	if item.ContentType == 1 {
+		return dynamicFeedImagePrefix + item.ContentID
+	}
+	return item.ContentID
+}
+
+func normalizeDynamicFeedCacheCursor(cursor DynamicFeedCacheCursor) DynamicFeedCacheCursor {
+	cursor.ContentID = strings.TrimSpace(cursor.ContentID)
+	cursor.VideoID = strings.TrimSpace(cursor.VideoID)
+	if cursor.ContentID == "" {
+		cursor.ContentID = cursor.VideoID
+	}
+	if cursor.VideoID == "" {
+		cursor.VideoID = cursor.ContentID
+	}
+	if cursor.ContentType != 1 {
+		cursor.ContentType = 0
+	}
+	return cursor
+}
+
+func beforeOrAtDynamicCursor(score int64, contentType int, contentID string, cursor DynamicFeedCacheCursor) bool {
 	if !cursor.HasCursor {
 		return false
 	}
+	cursor = normalizeDynamicFeedCacheCursor(cursor)
+	contentID = strings.TrimSpace(contentID)
 	if score > cursor.Score {
 		return true
 	}
 	if score < cursor.Score {
 		return false
 	}
-	return videoID >= cursor.VideoID
+	if contentType > cursor.ContentType {
+		return true
+	}
+	if contentType < cursor.ContentType {
+		return false
+	}
+	return contentID >= cursor.ContentID
 }

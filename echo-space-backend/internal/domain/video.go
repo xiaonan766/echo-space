@@ -53,6 +53,10 @@ type WebVideoItem struct {
 	VideoID            string `gorm:"column:video_id" json:"videoId"`
 	VideoCover         string `gorm:"column:video_cover" json:"videoCover"`
 	VideoName          string `gorm:"column:video_name" json:"videoName"`
+	ContentType        int    `gorm:"column:content_type" json:"contentType"`
+	ContentID          string `gorm:"column:content_id" json:"contentId"`
+	ContentCover       string `gorm:"column:content_cover" json:"contentCover"`
+	ContentName        string `gorm:"column:content_name" json:"contentName"`
 	UserID             string `gorm:"column:user_id" json:"userId"`
 	NickName           string `gorm:"column:nick_name" json:"nickName"`
 	Avatar             string `gorm:"column:avatar" json:"avatar"`

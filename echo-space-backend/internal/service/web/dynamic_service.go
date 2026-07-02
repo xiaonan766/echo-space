@@ -27,14 +27,14 @@ type DynamicRepository interface {
 	FindCurrentUserInfo(ctx context.Context, userID string) (*domain.DynamicCurrentUserInfo, error)
 	ListFollowUsers(ctx context.Context, userID string) ([]domain.DynamicFollowUserItem, error)
 	ListFeedByCursor(ctx context.Context, query repository.DynamicFeedQuery) ([]domain.WebVideoItem, error)
-	ListFeedVideoDetailsByIDs(ctx context.Context, videoIDs []string) ([]domain.WebVideoItem, error)
+	ListFeedContentDetailsByKeys(ctx context.Context, keys []domain.DynamicFeedContentKey) ([]domain.WebVideoItem, error)
 	UpsertFeedItems(ctx context.Context, userID string, list []domain.WebVideoItem) error
 }
 
 type DynamicFeedCache interface {
 	ListFeedItems(ctx context.Context, userID string, authorUserID string, cursor cache.DynamicFeedCacheCursor, limit int) (cache.DynamicFeedCachePage, error)
 	AddFeedItems(ctx context.Context, userID string, items []cache.DynamicFeedCacheItem) error
-	RemoveFeedVideoIDs(ctx context.Context, userID string, authorUserID string, videoIDs []string) error
+	RemoveFeedItems(ctx context.Context, userID string, authorUserID string, items []cache.DynamicFeedCacheItem) error
 }
 
 type DynamicService struct {
@@ -50,9 +50,11 @@ type LoadDynamicFeedInput struct {
 }
 
 type dynamicCursorPayload struct {
-	FocusUserID    string `json:"focusUserId,omitempty"`
-	LastUpdateTime string `json:"lastUpdateTime"`
-	LastVideoID    string `json:"lastVideoId"`
+	FocusUserID     string `json:"focusUserId,omitempty"`
+	LastUpdateTime  string `json:"lastUpdateTime"`
+	LastContentType int    `json:"lastContentType,omitempty"`
+	LastContentID   string `json:"lastContentId,omitempty"`
+	LastVideoID     string `json:"lastVideoId,omitempty"`
 }
 
 func NewDynamicService(repository DynamicRepository, feedCaches ...DynamicFeedCache) *DynamicService {
@@ -130,12 +132,14 @@ func (s *DynamicService) LoadFeed(ctx context.Context, input LoadDynamicFeedInpu
 
 func (s *DynamicService) loadFeedFromDatabase(ctx context.Context, input LoadDynamicFeedInput, cursor dynamicCursorPayload) (domain.DynamicFeedPage, error) {
 	list, err := s.repository.ListFeedByCursor(ctx, repository.DynamicFeedQuery{
-		UserID:         input.UserID,
-		FocusUserID:    input.FocusUserID,
-		PageSize:       input.PageSize + 1,
-		LastUpdateTime: cursor.LastUpdateTime,
-		LastVideoID:    cursor.LastVideoID,
-		ReadFanCount:   dynamicReadExpansionFanThreshold,
+		UserID:          input.UserID,
+		FocusUserID:     input.FocusUserID,
+		PageSize:        input.PageSize + 1,
+		LastUpdateTime:  cursor.LastUpdateTime,
+		LastContentType: cursor.LastContentType,
+		LastContentID:   cursor.LastContentID,
+		LastVideoID:     cursor.LastVideoID,
+		ReadFanCount:    dynamicReadExpansionFanThreshold,
 	})
 	if err != nil {
 		return domain.DynamicFeedPage{}, err
@@ -159,9 +163,11 @@ func (s *DynamicService) loadFeedFromDatabase(ctx context.Context, input LoadDyn
 	if hasMore && len(list) > 0 {
 		last := list[len(list)-1]
 		nextCursor, err = encodeDynamicCursor(dynamicCursorPayload{
-			FocusUserID:    input.FocusUserID,
-			LastUpdateTime: last.LastUpdateTime,
-			LastVideoID:    last.VideoID,
+			FocusUserID:     input.FocusUserID,
+			LastUpdateTime:  last.LastUpdateTime,
+			LastContentType: normalizeDynamicContentType(last.ContentType),
+			LastContentID:   dynamicFeedItemContentID(last),
+			LastVideoID:     dynamicFeedItemContentID(last),
 		})
 		if err != nil {
 			return domain.DynamicFeedPage{}, err
@@ -186,7 +192,7 @@ func (s *DynamicService) loadFeedFromCache(ctx context.Context, input LoadDynami
 	list := make([]domain.WebVideoItem, 0, targetSize)
 	currentCursor := cacheCursor
 	cacheHit := false
-	var dirtyVideoIDs []string
+	var dirtyItems []cache.DynamicFeedCacheItem
 
 	for i := 0; i < dynamicCacheReadLimit && len(list) < targetSize; i++ {
 		cachePage, err := s.feedCache.ListFeedItems(ctx, input.UserID, input.FocusUserID, currentCursor, targetSize-len(list))
@@ -201,27 +207,29 @@ func (s *DynamicService) loadFeedFromCache(ctx context.Context, input LoadDynami
 			break
 		}
 
-		videoIDs := dynamicFeedCacheVideoIDs(cachePage.Items)
-		details, err := s.repository.ListFeedVideoDetailsByIDs(ctx, videoIDs)
+		keys := dynamicFeedCacheContentKeys(cachePage.Items)
+		details, err := s.repository.ListFeedContentDetailsByKeys(ctx, keys)
 		if err != nil {
 			return domain.DynamicFeedPage{}, false, err
 		}
-		orderedList, missingVideoIDs := orderDynamicFeedDetailsByCacheItems(cachePage.Items, details)
+		orderedList, missingItems := orderDynamicFeedDetailsByCacheItems(cachePage.Items, details)
 		list = append(list, orderedList...)
-		dirtyVideoIDs = append(dirtyVideoIDs, missingVideoIDs...)
+		dirtyItems = append(dirtyItems, missingItems...)
 
 		lastCacheItem := cachePage.Items[len(cachePage.Items)-1]
 		currentCursor = cache.DynamicFeedCacheCursor{
-			HasCursor: true,
-			Score:     lastCacheItem.Score,
-			VideoID:   lastCacheItem.VideoID,
+			HasCursor:   true,
+			Score:       lastCacheItem.Score,
+			ContentType: normalizeDynamicContentType(lastCacheItem.ContentType),
+			ContentID:   dynamicFeedCacheItemContentID(lastCacheItem),
+			VideoID:     dynamicFeedCacheItemContentID(lastCacheItem),
 		}
 		if !cachePage.HasMore {
 			break
 		}
 	}
-	if len(dirtyVideoIDs) > 0 {
-		if err := s.feedCache.RemoveFeedVideoIDs(ctx, input.UserID, input.FocusUserID, dirtyVideoIDs); err != nil {
+	if len(dirtyItems) > 0 {
+		if err := s.feedCache.RemoveFeedItems(ctx, input.UserID, input.FocusUserID, dirtyItems); err != nil {
 			log.Printf("remove dirty dynamic feed cache items failed: userID=%s err=%v", input.UserID, err)
 		}
 	}
@@ -251,9 +259,11 @@ func buildDynamicFeedPage(input LoadDynamicFeedInput, list []domain.WebVideoItem
 	if hasMore && len(list) > 0 {
 		last := list[len(list)-1]
 		cursor, err := encodeDynamicCursor(dynamicCursorPayload{
-			FocusUserID:    input.FocusUserID,
-			LastUpdateTime: last.LastUpdateTime,
-			LastVideoID:    last.VideoID,
+			FocusUserID:     input.FocusUserID,
+			LastUpdateTime:  last.LastUpdateTime,
+			LastContentType: normalizeDynamicContentType(last.ContentType),
+			LastContentID:   dynamicFeedItemContentID(last),
+			LastVideoID:     dynamicFeedItemContentID(last),
 		})
 		if err != nil {
 			return domain.DynamicFeedPage{}, false, err
@@ -286,10 +296,13 @@ func dynamicFeedCacheItemsFromVideos(list []domain.WebVideoItem) []cache.Dynamic
 	items := make([]cache.DynamicFeedCacheItem, 0, len(list))
 	for _, item := range list {
 		dynamicTime, err := time.ParseInLocation(dynamicTimeLayout, item.LastUpdateTime, time.Local)
-		if err != nil || item.VideoID == "" {
+		contentID := dynamicFeedItemContentID(item)
+		if err != nil || contentID == "" {
 			continue
 		}
 		items = append(items, cache.DynamicFeedCacheItem{
+			ContentType:  normalizeDynamicContentType(item.ContentType),
+			ContentID:    contentID,
 			VideoID:      item.VideoID,
 			AuthorUserID: item.UserID,
 			Score:        cache.DynamicFeedScore(dynamicTime),
@@ -307,39 +320,47 @@ func dynamicCacheCursorFromPayload(payload dynamicCursorPayload) (cache.DynamicF
 		return cache.DynamicFeedCacheCursor{}, &BusinessError{Info: "\u53c2\u6570\u9519\u8bef"}
 	}
 	return cache.DynamicFeedCacheCursor{
-		HasCursor: true,
-		Score:     cache.DynamicFeedScore(dynamicTime),
-		VideoID:   payload.LastVideoID,
+		HasCursor:   true,
+		Score:       cache.DynamicFeedScore(dynamicTime),
+		ContentType: normalizeDynamicContentType(payload.LastContentType),
+		ContentID:   payload.LastContentID,
+		VideoID:     payload.LastContentID,
 	}, nil
 }
 
-func dynamicFeedCacheVideoIDs(items []cache.DynamicFeedCacheItem) []string {
-	videoIDs := make([]string, 0, len(items))
+func dynamicFeedCacheContentKeys(items []cache.DynamicFeedCacheItem) []domain.DynamicFeedContentKey {
+	keys := make([]domain.DynamicFeedContentKey, 0, len(items))
 	for _, item := range items {
-		if item.VideoID != "" {
-			videoIDs = append(videoIDs, item.VideoID)
+		contentID := dynamicFeedCacheItemContentID(item)
+		if contentID != "" {
+			keys = append(keys, domain.DynamicFeedContentKey{
+				ContentType: normalizeDynamicContentType(item.ContentType),
+				ContentID:   contentID,
+			})
 		}
 	}
-	return videoIDs
+	return keys
 }
 
-func orderDynamicFeedDetailsByCacheItems(items []cache.DynamicFeedCacheItem, details []domain.WebVideoItem) ([]domain.WebVideoItem, []string) {
+func orderDynamicFeedDetailsByCacheItems(items []cache.DynamicFeedCacheItem, details []domain.WebVideoItem) ([]domain.WebVideoItem, []cache.DynamicFeedCacheItem) {
 	detailMap := make(map[string]domain.WebVideoItem, len(details))
 	for _, detail := range details {
-		detailMap[detail.VideoID] = detail
+		detailMap[dynamicFeedItemKey(normalizeDynamicContentType(detail.ContentType), dynamicFeedItemContentID(detail))] = detail
 	}
 
 	orderedList := make([]domain.WebVideoItem, 0, len(items))
-	missingVideoIDs := make([]string, 0)
+	missingItems := make([]cache.DynamicFeedCacheItem, 0)
 	for _, item := range items {
-		detail, ok := detailMap[item.VideoID]
+		contentType := normalizeDynamicContentType(item.ContentType)
+		contentID := dynamicFeedCacheItemContentID(item)
+		detail, ok := detailMap[dynamicFeedItemKey(contentType, contentID)]
 		if !ok {
-			missingVideoIDs = append(missingVideoIDs, item.VideoID)
+			missingItems = append(missingItems, cache.DynamicFeedCacheItem{ContentType: contentType, ContentID: contentID, VideoID: contentID})
 			continue
 		}
 		orderedList = append(orderedList, detail)
 	}
-	return orderedList, missingVideoIDs
+	return orderedList, missingItems
 }
 
 func normalizeDynamicFeedInput(input LoadDynamicFeedInput) LoadDynamicFeedInput {
@@ -378,10 +399,19 @@ func decodeDynamicCursor(input LoadDynamicFeedInput) (dynamicCursorPayload, erro
 	if err := json.Unmarshal(content, &payload); err != nil {
 		return dynamicCursorPayload{}, &BusinessError{Info: "参数错误"}
 	}
+	payload.LastContentID = strings.TrimSpace(payload.LastContentID)
+	payload.LastVideoID = strings.TrimSpace(payload.LastVideoID)
+	if payload.LastContentID == "" {
+		payload.LastContentID = payload.LastVideoID
+	}
+	if payload.LastVideoID == "" {
+		payload.LastVideoID = payload.LastContentID
+	}
+	payload.LastContentType = normalizeDynamicContentType(payload.LastContentType)
 	if payload.FocusUserID != input.FocusUserID ||
 		strings.TrimSpace(payload.LastUpdateTime) == "" ||
-		len(payload.LastVideoID) != 10 ||
-		!isValidPublicVideoID(payload.LastVideoID) {
+		len(payload.LastContentID) != 10 ||
+		!isValidPublicVideoID(payload.LastContentID) {
 		return dynamicCursorPayload{}, &BusinessError{Info: "参数错误"}
 	}
 	return payload, nil
@@ -393,4 +423,34 @@ func encodeDynamicCursor(payload dynamicCursorPayload) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(content), nil
+}
+
+func dynamicFeedItemContentID(item domain.WebVideoItem) string {
+	contentID := strings.TrimSpace(item.ContentID)
+	if contentID != "" {
+		return contentID
+	}
+	return strings.TrimSpace(item.VideoID)
+}
+
+func dynamicFeedCacheItemContentID(item cache.DynamicFeedCacheItem) string {
+	contentID := strings.TrimSpace(item.ContentID)
+	if contentID != "" {
+		return contentID
+	}
+	return strings.TrimSpace(item.VideoID)
+}
+
+func normalizeDynamicContentType(contentType int) int {
+	if contentType == domain.ContentTypeImage {
+		return domain.ContentTypeImage
+	}
+	return domain.ContentTypeVideo
+}
+
+func dynamicFeedItemKey(contentType int, contentID string) string {
+	if normalizeDynamicContentType(contentType) == domain.ContentTypeImage {
+		return "1:" + strings.TrimSpace(contentID)
+	}
+	return "0:" + strings.TrimSpace(contentID)
 }

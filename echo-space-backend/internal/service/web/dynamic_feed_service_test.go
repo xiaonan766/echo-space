@@ -69,6 +69,31 @@ func TestDynamicFeedWritesRedisZSetAfterFanout(t *testing.T) {
 	}
 }
 
+func TestDynamicFeedImageFanoutKeepsEventType(t *testing.T) {
+	feedCache := &fakeDynamicFanoutCache{}
+	repo := &fakeDynamicFeedRepository{
+		fansCount:     dynamicReadExpansionFanThreshold - 1,
+		fanoutUserIDs: []string{"1000000001"},
+	}
+	service := NewDynamicFeedService(repo, &fakeDynamicActiveStore{}, nil, feedCache)
+	service.now = fixedDynamicNow
+	message := testDynamicFeedMessage()
+	message.EventID = "image_Image00001"
+	message.VideoID = "Image00001"
+	message.EventType = domain.DynamicEventTypeImage
+
+	err := service.spreadDynamicFeed(context.Background(), message)
+	if err != nil {
+		t.Fatalf("spread dynamic feed returned error: %v", err)
+	}
+	if repo.lastAllFollowerMessage.EventType != domain.DynamicEventTypeImage {
+		t.Fatalf("fanout event type = %d, want image", repo.lastAllFollowerMessage.EventType)
+	}
+	if feedCache.item.ContentType != domain.ContentTypeImage || feedCache.item.ContentID != "Image00001" {
+		t.Fatalf("cache item = %#v, want image content item", feedCache.item)
+	}
+}
+
 func TestDynamicFeedUsesCachedAuthorPolicy(t *testing.T) {
 	activeStore := &fakeDynamicActiveStore{
 		cachedPolicy: cache.DynamicAuthorPolicy{
@@ -133,11 +158,13 @@ func testDynamicFeedMessage() domain.DynamicFeedMessage {
 type fakeDynamicFeedRepository struct {
 	fansCount int64
 
-	countFansCalls       int
-	allFollowerWrites    int
-	activeFollowerWrites int
-	activeUserIDs        []string
-	fanoutUserIDs        []string
+	countFansCalls            int
+	allFollowerWrites         int
+	activeFollowerWrites      int
+	activeUserIDs             []string
+	fanoutUserIDs             []string
+	lastAllFollowerMessage    domain.DynamicFeedMessage
+	lastActiveFollowerMessage domain.DynamicFeedMessage
 
 	pendingMessages    []domain.DynamicFeedMessageRecord
 	markPublishedCalls int
@@ -151,11 +178,13 @@ func (r *fakeDynamicFeedRepository) CountFans(ctx context.Context, authorUserID 
 
 func (r *fakeDynamicFeedRepository) UpsertFeedForAllFollowers(ctx context.Context, message domain.DynamicFeedMessage) (int64, error) {
 	r.allFollowerWrites++
+	r.lastAllFollowerMessage = message
 	return 1, nil
 }
 
 func (r *fakeDynamicFeedRepository) UpsertFeedForActiveFollowers(ctx context.Context, message domain.DynamicFeedMessage, activeUserIDs []string) (int64, error) {
 	r.activeFollowerWrites++
+	r.lastActiveFollowerMessage = message
 	r.activeUserIDs = append([]string(nil), activeUserIDs...)
 	return int64(len(activeUserIDs)), nil
 }
