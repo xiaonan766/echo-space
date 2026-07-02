@@ -2,7 +2,6 @@
   <div class="gallery-page">
     <div class="gallery-header">
       <div class="title">图库</div>
-      <div class="sub-title">浏览已审核通过的图片投稿</div>
     </div>
     <DataLoadMoreList
       :dataSource="dataSource"
@@ -76,11 +75,6 @@ onMounted(() => {
       font-size: 24px;
       font-weight: 600;
       color: var(--text);
-    }
-    .sub-title {
-      margin-left: 14px;
-      color: #9499a0;
-      font-size: 14px;
     }
   }
 }
