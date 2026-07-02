@@ -92,6 +92,8 @@ Go 后端服务：http://localhost:7070
 上传视频页面
 <img width="1919" height="974" alt="image" src="https://github.com/user-attachments/assets/73e244da-1c1b-4a8b-844f-98ef957da413" />
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/4fea49f5-427f-4851-88d4-23f67ae82260" />
+上传图片页面
+<img width="1919" height="986" alt="image" src="https://github.com/user-attachments/assets/c6c5de6d-a208-4eff-b939-289ecf74b7d2" />
 稿件管理页面
 <img width="1917" height="987" alt="image" src="https://github.com/user-attachments/assets/b7e196ad-fe13-42ba-a343-071175275e85" />
 <img width="1919" height="991" alt="image" src="https://github.com/user-attachments/assets/6bb5188a-2060-4be8-9dd8-4e469317c0b0" />
@@ -127,7 +129,11 @@ Go 后端服务：http://localhost:7070
 新增周边页面
 <img width="1909" height="977" alt="image" src="https://github.com/user-attachments/assets/d6ed6a3b-07a4-49cf-9ecb-b29dfacb4174" />
 稿件管理页面
+<img width="1919" height="979" alt="image" src="https://github.com/user-attachments/assets/fcaa26bc-4ca4-4164-ae2e-3de07d0d6bee" />
+<img width="1919" height="981" alt="image" src="https://github.com/user-attachments/assets/c8ca5741-5513-4b08-bbd8-f6d171c8c899" />
 <img width="1919" height="983" alt="image" src="https://github.com/user-attachments/assets/a06a2b06-5a86-4524-8b10-db772a963871" />
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/f8c81ba9-70c2-4e91-8dd7-4799b0fe89fb" />
-审核视频详情页面
+审核详情页面
 <img width="1919" height="984" alt="image" src="https://github.com/user-attachments/assets/ab415266-19ea-4d7b-9453-ccce7ca9968f" />
+<img width="1919" height="987" alt="image" src="https://github.com/user-attachments/assets/7fe67c3d-80a9-4718-b9d3-9c17d252f423" />
+
