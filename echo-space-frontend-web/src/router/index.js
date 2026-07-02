@@ -20,6 +20,16 @@ const router = createRouter({
           component: () => import('@/views/shop/Shop.vue'),
         },
         {
+          path: '/gallery',
+          name: 'gallery',
+          component: () => import('@/views/gallery/Gallery.vue'),
+        },
+        {
+          path: '/gallery/:imageId',
+          name: 'galleryDetail',
+          component: () => import('@/views/gallery/GalleryDetail.vue'),
+        },
+        {
           path: '/shop/peripheral/:productId',
           name: 'shopPeripheralDetail',
           component: () => import('@/views/shop/PeripheralDetail.vue'),

@@ -20,7 +20,7 @@
   >
     {{ loadEndMsg }}
   </div>
-  <NoData v-if="dataSource.list && dataSource.list.length == 0"> </NoData>
+  <NoData v-if="dataSource.list && dataSource.list.length == 0" :msg="noDataMsg"> </NoData>
 </template>
 
 <script setup>
@@ -51,6 +51,10 @@ const props = defineProps({
   loadEndMsg: {
     type: String,
     default: "已经到底啦~~",
+  },
+  noDataMsg: {
+    type: String,
+    default: "暂无数据",
   },
   gridCount: {
     type: Number,

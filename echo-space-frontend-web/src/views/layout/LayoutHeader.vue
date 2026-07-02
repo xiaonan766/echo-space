@@ -32,6 +32,7 @@
         </div>
       </el-popover>
       <router-link class="iconfont menu-item" to="/shop">购物</router-link>
+      <router-link class="iconfont menu-item" to="/gallery">图库</router-link>
     </div>
     <div class="search-body">
       <div class="search-panel" @click.stop v-if="route.path != '/search'">

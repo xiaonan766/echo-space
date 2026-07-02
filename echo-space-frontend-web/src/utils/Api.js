@@ -18,6 +18,8 @@ const Api = {
     getSearchKeywordTop: server_web + "/video/getSearchKeywordTop",
     loadRecommendVideo: server_web + "/video/loadRecommendVideo",
     loadVideo: server_web + "/video/loadVideo",
+    loadGalleryImageList: server_web + "/gallery/loadImageList",
+    getGalleryImageInfo: server_web + "/gallery/getImageInfo",
 
     postVideo: server_web + "/ucenter/postVideo",
     saveVideoInteraction: server_web + "/ucenter/saveVideoInteraction",
