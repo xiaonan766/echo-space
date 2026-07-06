@@ -21,14 +21,19 @@ func (r *fakeUcenterContentVideoRepository) ListUserAllVideo(ctx context.Context
 }
 
 type fakeUcenterContentInteractRepository struct {
-	commentQuery  repository.UcenterInteractListQuery
-	commentList   []domain.UcenterCommentItem
-	commentErr    error
-	commentCalled int
-	danmuQuery    repository.UcenterInteractListQuery
-	danmuList     []domain.UcenterDanmuItem
-	danmuErr      error
-	danmuCalled   int
+	commentQuery     repository.UcenterInteractListQuery
+	commentList      []domain.UcenterCommentItem
+	commentErr       error
+	commentCalled    int
+	danmuQuery       repository.UcenterInteractListQuery
+	danmuList        []domain.UcenterDanmuItem
+	danmuErr         error
+	danmuCalled      int
+	collectionQuery  repository.UhomeCollectionListQuery
+	collectionList   []domain.UserCollectionItem
+	collectionTotal  int64
+	collectionErr    error
+	collectionCalled int
 }
 
 func (r *fakeUcenterContentInteractRepository) ListUcenterCommentByCursor(ctx context.Context, query repository.UcenterInteractListQuery) ([]domain.UcenterCommentItem, error) {
@@ -41,6 +46,12 @@ func (r *fakeUcenterContentInteractRepository) ListUcenterDanmuByCursor(ctx cont
 	r.danmuCalled++
 	r.danmuQuery = query
 	return r.danmuList, r.danmuErr
+}
+
+func (r *fakeUcenterContentInteractRepository) ListUserCollectionByPage(ctx context.Context, query repository.UhomeCollectionListQuery) ([]domain.UserCollectionItem, int64, error) {
+	r.collectionCalled++
+	r.collectionQuery = query
+	return r.collectionList, r.collectionTotal, r.collectionErr
 }
 
 func TestUcenterContentServiceLoadAllVideo(t *testing.T) {
@@ -347,6 +358,72 @@ func TestUcenterContentServiceLoadDanmuReturnsRepositoryError(t *testing.T) {
 	_, err := service.LoadDanmu(context.Background(), UcenterInteractListInput{UserID: "1000000001"})
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("error = %v, want %v", err, expectedErr)
+	}
+}
+
+func TestUcenterContentServiceLoadUserCollection(t *testing.T) {
+	interactRepository := &fakeUcenterContentInteractRepository{
+		collectionList: []domain.UserCollectionItem{
+			{ActionID: 20, VideoID: "Abc123Def4", VideoName: "测试收藏"},
+		},
+		collectionTotal: 21,
+	}
+	service := NewUcenterContentService(nil, interactRepository)
+
+	result, err := service.LoadUserCollection(context.Background(), UhomeCollectionListInput{
+		UserID:   " 1000000001 ",
+		PageNo:   2,
+		PageSize: 8,
+	})
+	if err != nil {
+		t.Fatalf("LoadUserCollection error = %v", err)
+	}
+	query := interactRepository.collectionQuery
+	if query.UserID != "1000000001" || query.PageNo != 2 || query.PageSize != 8 {
+		t.Fatalf("query = %#v, want trimmed user and page", query)
+	}
+	if result.TotalCount != 21 || result.PageNo != 2 || result.PageSize != 8 || result.PageTotal != 3 {
+		t.Fatalf("pagination result = %#v, want total 21 page 2 size 8 totalPage 3", result)
+	}
+	if len(result.List) != 1 || result.List[0].VideoName != "测试收藏" {
+		t.Fatalf("result list = %#v, want one collection item", result.List)
+	}
+}
+
+func TestUcenterContentServiceLoadUserCollectionRejectsInvalidUserID(t *testing.T) {
+	interactRepository := &fakeUcenterContentInteractRepository{}
+	service := NewUcenterContentService(nil, interactRepository)
+
+	_, err := service.LoadUserCollection(context.Background(), UhomeCollectionListInput{UserID: "bad"})
+	if err == nil {
+		t.Fatal("LoadUserCollection error = nil, want business error")
+	}
+	if _, ok := IsBusinessError(err); !ok {
+		t.Fatalf("error type = %T, want BusinessError", err)
+	}
+	if interactRepository.collectionCalled != 0 {
+		t.Fatalf("repository called = %d, want 0", interactRepository.collectionCalled)
+	}
+}
+
+func TestUcenterContentServiceLoadUserCollectionDefaultsPage(t *testing.T) {
+	interactRepository := &fakeUcenterContentInteractRepository{}
+	service := NewUcenterContentService(nil, interactRepository)
+
+	result, err := service.LoadUserCollection(context.Background(), UhomeCollectionListInput{
+		UserID:   "1000000001",
+		PageNo:   -1,
+		PageSize: 500,
+	})
+	if err != nil {
+		t.Fatalf("LoadUserCollection error = %v", err)
+	}
+	query := interactRepository.collectionQuery
+	if query.PageNo != defaultUhomeCollectionPageNo || query.PageSize != maxUhomeCollectionPageSize {
+		t.Fatalf("query = %#v, want default pageNo and max pageSize", query)
+	}
+	if result.PageNo != defaultUhomeCollectionPageNo || result.PageSize != maxUhomeCollectionPageSize {
+		t.Fatalf("result = %#v, want normalized pagination", result)
 	}
 }
 

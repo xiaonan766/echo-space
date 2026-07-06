@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	defaultUcenterContentPageSize = 15
-	maxUcenterContentPageSize     = 100
+	defaultUcenterContentPageSize  = 15
+	maxUcenterContentPageSize      = 100
+	defaultUhomeCollectionPageNo   = 1
+	defaultUhomeCollectionPageSize = 15
+	maxUhomeCollectionPageSize     = 50
 
 	ucenterCursorKindComment = "comment"
 	ucenterCursorKindDanmu   = "danmu"
@@ -29,6 +32,7 @@ type UcenterVideoRepository interface {
 type UcenterInteractRepository interface {
 	ListUcenterCommentByCursor(ctx context.Context, query repository.UcenterInteractListQuery) ([]domain.UcenterCommentItem, error)
 	ListUcenterDanmuByCursor(ctx context.Context, query repository.UcenterInteractListQuery) ([]domain.UcenterDanmuItem, error)
+	ListUserCollectionByPage(ctx context.Context, query repository.UhomeCollectionListQuery) ([]domain.UserCollectionItem, int64, error)
 }
 
 type UcenterContentService struct {
@@ -40,6 +44,12 @@ type UcenterInteractListInput struct {
 	UserID   string
 	VideoID  string
 	Cursor   string
+	PageSize int
+}
+
+type UhomeCollectionListInput struct {
+	UserID   string
+	PageNo   int
 	PageSize int
 }
 
@@ -138,6 +148,26 @@ func (s *UcenterContentService) LoadDanmu(ctx context.Context, input UcenterInte
 	)
 }
 
+func (s *UcenterContentService) LoadUserCollection(ctx context.Context, input UhomeCollectionListInput) (domain.PaginationResult[domain.UserCollectionItem], error) {
+	input, err := normalizeUhomeCollectionListInput(input)
+	if err != nil {
+		return domain.PaginationResult[domain.UserCollectionItem]{}, err
+	}
+	if s == nil || s.interactRepository == nil {
+		return domain.PaginationResult[domain.UserCollectionItem]{}, errors.New("ucenter content interact repository is not ready")
+	}
+
+	list, totalCount, err := s.interactRepository.ListUserCollectionByPage(ctx, repository.UhomeCollectionListQuery{
+		UserID:   input.UserID,
+		PageNo:   input.PageNo,
+		PageSize: input.PageSize,
+	})
+	if err != nil {
+		return domain.PaginationResult[domain.UserCollectionItem]{}, err
+	}
+	return domain.NewPaginationResult(list, totalCount, input.PageNo, input.PageSize), nil
+}
+
 func normalizeUcenterInteractListInput(input UcenterInteractListInput, cursorKind string) (UcenterInteractListInput, ucenterCursorPayload, bool, error) {
 	input.UserID = strings.TrimSpace(input.UserID)
 	input.VideoID = strings.TrimSpace(input.VideoID)
@@ -160,6 +190,23 @@ func normalizeUcenterInteractListInput(input UcenterInteractListInput, cursorKin
 		return input, ucenterCursorPayload{}, false, err
 	}
 	return input, cursorPayload, hasCursor, nil
+}
+
+func normalizeUhomeCollectionListInput(input UhomeCollectionListInput) (UhomeCollectionListInput, error) {
+	input.UserID = strings.TrimSpace(input.UserID)
+	if !validWebUserID(input.UserID) {
+		return input, &BusinessError{Info: "参数错误"}
+	}
+	if input.PageNo <= 0 {
+		input.PageNo = defaultUhomeCollectionPageNo
+	}
+	if input.PageSize <= 0 {
+		input.PageSize = defaultUhomeCollectionPageSize
+	}
+	if input.PageSize > maxUhomeCollectionPageSize {
+		input.PageSize = maxUhomeCollectionPageSize
+	}
+	return input, nil
 }
 
 func decodeUcenterCursor(cursor string, expectedKind string, videoID string) (ucenterCursorPayload, bool, error) {

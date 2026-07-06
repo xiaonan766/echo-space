@@ -72,6 +72,19 @@ func (h *UcenterContentHandler) LoadDanmu(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *UcenterContentHandler) LoadUserCollection(c *gin.Context) {
+	result, err := h.service.LoadUserCollection(c.Request.Context(), webservice.UhomeCollectionListInput{
+		UserID:   formOrQuery(c, "userId"),
+		PageNo:   parseWebIntWithDefault(formOrQuery(c, "pageNo"), 1),
+		PageSize: parseWebIntWithDefault(formOrQuery(c, "pageSize"), 15),
+	})
+	if err != nil {
+		handleUcenterContentError(c, "web load uhome user collection", err)
+		return
+	}
+	response.Success(c, result)
+}
+
 func handleUcenterContentError(c *gin.Context, logPrefix string, err error) {
 	if businessError, ok := webservice.IsBusinessError(err); ok {
 		response.BusinessError(c, businessError.Info, nil)

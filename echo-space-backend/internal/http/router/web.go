@@ -155,6 +155,10 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	commentGroup.Use(middleware.WebAuth(accountService))
 	commentGroup.POST("/postComment", commentHandler.PostComment)
 
+	interactUhomeGroup := interactGroup.Group("/uhome")
+	interactUhomeGroup.GET("/loadUserCollection", ucenterContentHandler.LoadUserCollection)
+	interactUhomeGroup.POST("/loadUserCollection", ucenterContentHandler.LoadUserCollection)
+
 	interactUcenterGroup := interactGroup.Group("/ucenter", middleware.WebAuth(accountService))
 	interactUcenterGroup.GET("/loadComment", ucenterContentHandler.LoadComment)
 	interactUcenterGroup.POST("/loadComment", ucenterContentHandler.LoadComment)

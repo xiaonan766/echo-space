@@ -20,6 +20,8 @@ var (
 	ErrUserActionCoinFailed       = errors.New("user action coin failed")
 )
 
+const userActionTypeVideoCollect = 3
+
 type InteractRepository struct {
 	db *gorm.DB
 }
@@ -45,6 +47,12 @@ type UcenterInteractListQuery struct {
 	CursorID  int
 	Direction string
 	Limit     int
+}
+
+type UhomeCollectionListQuery struct {
+	UserID   string
+	PageNo   int
+	PageSize int
 }
 
 func NewInteractRepository(db *gorm.DB) *InteractRepository {
@@ -205,6 +213,72 @@ func (r *InteractRepository) ListUcenterDanmuByCursor(ctx context.Context, query
 		danmuList = []domain.UcenterDanmuItem{}
 	}
 	return danmuList, nil
+}
+
+func (r *InteractRepository) ListUserCollectionByPage(ctx context.Context, query UhomeCollectionListQuery) ([]domain.UserCollectionItem, int64, error) {
+	baseDB := r.db.WithContext(ctx).
+		Table("user_action ua").
+		Where("ua.user_id = ? AND ua.action_type = ?", query.UserID, userActionTypeVideoCollect)
+
+	var totalCount int64
+	if err := baseDB.Count(&totalCount).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var list []domain.UserCollectionItem
+	offset := (query.PageNo - 1) * query.PageSize
+	err := r.db.WithContext(ctx).
+		Table("user_action ua").
+		Select(`
+			ua.action_id,
+			ua.video_id,
+			COALESCE(ua.video_user_id, '') AS video_user_id,
+			ua.comment_id,
+			ua.action_type,
+			ua.action_count,
+			ua.user_id,
+			COALESCE(DATE_FORMAT(ua.action_time, '%Y-%m-%d %H:%i:%s'), '') AS action_time,
+			COALESCE(vi.video_cover, '') AS video_cover,
+			COALESCE(vi.video_name, '') AS video_name,
+			0 AS content_type,
+			'' AS content_id,
+			'' AS content_cover,
+			'' AS content_name,
+			COALESCE(ui.nick_name, '') AS nick_name,
+			COALESCE(ui.avatar, '') AS avatar,
+			COALESCE(DATE_FORMAT(vi.create_time, '%Y-%m-%d %H:%i:%s'), '') AS create_time,
+			COALESCE(DATE_FORMAT(vi.last_update_time, '%Y-%m-%d %H:%i:%s'), '') AS last_update_time,
+			COALESCE(vi.p_category_id, 0) AS p_category_id,
+			vi.category_id,
+			COALESCE(vi.post_type, 0) AS post_type,
+			COALESCE(vi.origin_info, '') AS origin_info,
+			COALESCE(vi.tags, '') AS tags,
+			COALESCE(vi.introduction, '') AS introduction,
+			COALESCE(vi.interaction, '') AS interaction,
+			COALESCE(vi.download_permission, 1) AS download_permission,
+			COALESCE(vi.duration, 0) AS duration,
+			COALESCE(vi.play_count, 0) AS play_count,
+			COALESCE(vi.like_count, 0) AS like_count,
+			COALESCE(vi.danmu_count, 0) AS danmu_count,
+			COALESCE(vi.comment_count, 0) AS comment_count,
+			COALESCE(vi.coin_count, 0) AS coin_count,
+			COALESCE(vi.collect_count, 0) AS collect_count,
+			COALESCE(vi.recommend_type, 0) AS recommend_type
+		`).
+		Joins("LEFT JOIN video_info vi ON ua.video_id = vi.video_id").
+		Joins("LEFT JOIN user_info ui ON vi.user_id = ui.user_id").
+		Where("ua.user_id = ? AND ua.action_type = ?", query.UserID, userActionTypeVideoCollect).
+		Order("ua.action_time desc, ua.action_id desc").
+		Offset(offset).
+		Limit(query.PageSize).
+		Scan(&list).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	if list == nil {
+		list = []domain.UserCollectionItem{}
+	}
+	return list, totalCount, nil
 }
 
 func (r *InteractRepository) FindCommentDeleteInfo(ctx context.Context, commentID int) (*domain.CommentDeleteInfo, error) {
