@@ -120,6 +120,8 @@ Go 后端服务：http://localhost:7070
 <img width="1919" height="979" alt="image" src="https://github.com/user-attachments/assets/d8a1a8d0-227a-4f33-bbbf-3f871c40e08a" />
 <img width="1919" height="987" alt="image" src="https://github.com/user-attachments/assets/e802467b-92d2-4a92-857b-8def1d67012e" />
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/e4ff6bbc-5538-4469-b4c9-55b299775a1e" />
+收藏列表页面
+<img width="1919" height="988" alt="image" src="https://github.com/user-attachments/assets/7807d874-4141-4b6f-af42-0c2740e49e98" />
 
 —— —— —— —— —— —— —— —— —— —— —— —— ——
 
