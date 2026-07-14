@@ -113,7 +113,10 @@ Go 后端服务：http://localhost:7070
 <img width="1919" height="982" alt="image" src="https://github.com/user-attachments/assets/f6388f5d-1581-4791-aafd-6999e0eb8c18" />
 向量数据库：
 <img width="1917" height="956" alt="image" src="https://github.com/user-attachments/assets/dfde6e8f-d1aa-43b8-8d8d-f94fe7a68e33" />
-图片搜索：
+图片以文搜图：
+<img width="1919" height="988" alt="image" src="https://github.com/user-attachments/assets/3b16c228-7b6a-4192-a6c5-fb0166ea580a" />
+图片以图搜图：
+<img width="1919" height="992" alt="image" src="https://github.com/user-attachments/assets/dd5798f1-8c28-455f-85cd-579a4e774776" />
 个人主页周边展示柜
 <img width="1919" height="985" alt="image" src="https://github.com/user-attachments/assets/ea3854f2-44e1-4a04-af65-e4a103d7462c" />
 <img width="1919" height="989" alt="image" src="https://github.com/user-attachments/assets/06701344-6d84-489b-99f5-002d081487c2" />
