@@ -1,4 +1,4 @@
-后端：
+<img width="1919" height="987" alt="image" src="https://github.com/user-attachments/assets/4dc8f44f-2975-4c1b-b4d6-653318203981" />后端：
 
 语言：Go
 
@@ -116,6 +116,7 @@ Go 后端服务：http://localhost:7070
 图片以文搜图：
 <img width="1919" height="988" alt="image" src="https://github.com/user-attachments/assets/3b16c228-7b6a-4192-a6c5-fb0166ea580a" />
 图片以图搜图：
+<img width="1919" height="987" alt="image" src="https://github.com/user-attachments/assets/7f209742-1382-426e-b211-3182a0b16a6b" />
 <img width="1919" height="992" alt="image" src="https://github.com/user-attachments/assets/dd5798f1-8c28-455f-85cd-579a4e774776" />
 个人主页周边展示柜
 <img width="1919" height="985" alt="image" src="https://github.com/user-attachments/assets/ea3854f2-44e1-4a04-af65-e4a103d7462c" />
