@@ -111,6 +111,9 @@ Go 后端服务：http://localhost:7070
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/cb0d7624-c76f-4b21-85db-3169e8c6952c" />
 搜索视频页面
 <img width="1919" height="982" alt="image" src="https://github.com/user-attachments/assets/f6388f5d-1581-4791-aafd-6999e0eb8c18" />
+向量数据库：
+<img width="1917" height="956" alt="image" src="https://github.com/user-attachments/assets/dfde6e8f-d1aa-43b8-8d8d-f94fe7a68e33" />
+图片搜索：
 个人主页周边展示柜
 <img width="1919" height="985" alt="image" src="https://github.com/user-attachments/assets/ea3854f2-44e1-4a04-af65-e4a103d7462c" />
 <img width="1919" height="989" alt="image" src="https://github.com/user-attachments/assets/06701344-6d84-489b-99f5-002d081487c2" />
