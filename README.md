@@ -80,7 +80,7 @@ Go 后端服务：http://localhost:7070
 首页：
 <img width="1918" height="978" alt="image" src="https://github.com/user-attachments/assets/8b1021ec-d898-47f1-adc9-fffaf99e18f7" />
 图库：
-<img width="1919" height="986" alt="image" src="https://github.com/user-attachments/assets/98591218-b560-45ac-94a4-6783fab21d7a" />
+<img width="1919" height="983" alt="image" src="https://github.com/user-attachments/assets/9418067a-dcc4-40c6-894f-2dd966a0c88b" />
 周边列表页面
 <img width="1905" height="982" alt="image" src="https://github.com/user-attachments/assets/0044a642-cd3d-412d-a8ae-1b18b9dd78b5" />
 周边详情页面
