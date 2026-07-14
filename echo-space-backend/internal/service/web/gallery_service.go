@@ -9,6 +9,7 @@ import (
 
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/service/gallerysearch"
 )
 
 const (
@@ -30,10 +31,29 @@ type galleryRepository interface {
 
 type GalleryService struct {
 	galleryRepository galleryRepository
+	vectorSearch      *gallerysearch.Service
 }
 
-func NewGalleryService(galleryRepository galleryRepository) *GalleryService {
-	return &GalleryService{galleryRepository: galleryRepository}
+func NewGalleryService(galleryRepository galleryRepository, vectorSearch ...*gallerysearch.Service) *GalleryService {
+	service := &GalleryService{galleryRepository: galleryRepository}
+	if len(vectorSearch) > 0 {
+		service.vectorSearch = vectorSearch[0]
+	}
+	return service
+}
+
+func (s *GalleryService) Search(ctx context.Context, input gallerysearch.SearchInput) (domain.GallerySearchResult, error) {
+	if s == nil || s.vectorSearch == nil {
+		return domain.GallerySearchResult{}, &BusinessError{Info: "图库搜索服务暂不可用"}
+	}
+	result, err := s.vectorSearch.Search(ctx, input)
+	if err == nil {
+		return result, nil
+	}
+	if errors.Is(err, gallerysearch.ErrUnavailable) || errors.Is(err, gallerysearch.ErrExpired) {
+		return domain.GallerySearchResult{}, &BusinessError{Info: err.Error()}
+	}
+	return domain.GallerySearchResult{}, &BusinessError{Info: err.Error()}
 }
 
 func (s *GalleryService) LoadImageList(ctx context.Context, input GalleryImageListInput) (domain.PaginationResult[domain.GalleryImageItem], error) {

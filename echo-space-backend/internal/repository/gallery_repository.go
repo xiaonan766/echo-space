@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -10,6 +11,56 @@ import (
 
 type GalleryRepository struct {
 	db *gorm.DB
+}
+
+func (r *GalleryRepository) ListApprovedVectorSourcesByImageID(ctx context.Context, imageID string) ([]domain.GalleryVectorSource, error) {
+	var list []domain.GalleryVectorSource
+	err := applyApprovedGalleryImageFilter(r.db.WithContext(ctx).Table("video_info_post v")).
+		Select(`f.file_id, v.video_id AS image_id, f.file_path AS source_name, UNIX_TIMESTAMP(v.last_update_time) AS content_version`).
+		Joins("JOIN video_info_file_post f ON f.video_id = v.video_id").
+		Where("v.video_id = ?", imageID).
+		Where("f.update_type <> ?", domain.VideoFileUpdateDeletePending).
+		Where("f.transfer_result = ?", domain.VideoFileTransferSuccess).
+		Where("COALESCE(f.file_path, '') <> ''").
+		Order("f.file_index asc").
+		Scan(&list).Error
+	return list, err
+}
+
+func (r *GalleryRepository) ListApprovedImageIDs(ctx context.Context) ([]string, error) {
+	var imageIDs []string
+	err := applyApprovedGalleryImageFilter(r.db.WithContext(ctx).Table("video_info_post v")).
+		Pluck("v.video_id", &imageIDs).Error
+	return imageIDs, err
+}
+
+func (r *GalleryRepository) ListApprovedImagesByIDs(ctx context.Context, imageIDs []string) ([]domain.GalleryImageItem, error) {
+	if len(imageIDs) == 0 {
+		return []domain.GalleryImageItem{}, nil
+	}
+	var list []domain.GalleryImageItem
+	err := applyApprovedGalleryImageFilter(r.db.WithContext(ctx).Table("video_info_post v")).
+		Select(galleryImageSelectColumns).
+		Joins("LEFT JOIN user_info u ON u.user_id = v.user_id").
+		Where("v.video_id IN ?", imageIDs).
+		Scan(&list).Error
+	return list, err
+}
+
+func (r *GalleryRepository) IsApprovedImageFile(ctx context.Context, imageID, fileID string) (string, bool, error) {
+	var sourceName string
+	err := applyApprovedGalleryImageFilter(r.db.WithContext(ctx).Table("video_info_post v")).
+		Select("COALESCE(f.file_path, '')").
+		Joins("JOIN video_info_file_post f ON f.video_id = v.video_id").
+		Where("v.video_id = ? AND f.file_id = ?", strings.TrimSpace(imageID), strings.TrimSpace(fileID)).
+		Where("f.update_type <> ?", domain.VideoFileUpdateDeletePending).
+		Where("f.transfer_result = ?", domain.VideoFileTransferSuccess).
+		Where("COALESCE(f.file_path, '') <> ''").
+		Scan(&sourceName).Error
+	if err != nil {
+		return "", false, err
+	}
+	return sourceName, sourceName != "", nil
 }
 
 type GalleryImageListQuery struct {

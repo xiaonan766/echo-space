@@ -55,7 +55,7 @@
       <div class="summary empty" v-else>这个图片稿件还没有简介</div>
       <div class="tag-list" v-if="imageInfo.tags && imageInfo.tags.length > 0">
         <router-link
-          :to="`/search?keyword=${item}`"
+          :to="`/gallery?mode=text&keyword=${encodeURIComponent(item)}`"
           class="tag-item"
           target="_blank"
           v-for="item in imageInfo.tags"

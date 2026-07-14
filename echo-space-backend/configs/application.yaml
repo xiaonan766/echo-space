@@ -41,6 +41,19 @@ file:
   resourceRoot: "resources"
   maxImageMB: 10
 
+# API Key 仅通过 DASHSCOPE_API_KEY 环境变量配置。
+gallerySearch:
+  milvusAddress: "localhost:19530"
+  milvusToken: ""
+  milvusCollection: "echo_space_gallery_image_v1"
+  dashScopeAPIKey: ""
+  dashScopeBaseURL: "https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding"
+  embeddingModel: "tongyi-embedding-vision-plus-2026-03-06"
+  embeddingDimension: 1152
+  minScore: 0.15
+  queryVectorTTL: "10m"
+  reconcileInterval: "10m"
+
 commentReview:
   enabled: true
   rejectMessage: "评论包含敏感内容，请修改后再发布"

@@ -38,16 +38,42 @@
       <div class="search-panel" @click.stop v-if="route.path != '/search'">
         <div class="search-panel-inner">
           <div :class="['input-panel', showHistory ? 'focus-input' : '']">
+            <div class="gallery-mode-switch" v-if="isGalleryContext">
+              <button
+                type="button"
+                :class="{ active: gallerySearchType === 'text' }"
+                @click.stop="setGallerySearchType('text')"
+              >
+                文搜图
+              </button>
+              <button
+                type="button"
+                :class="{ active: gallerySearchType === 'image' }"
+                @click.stop="setGallerySearchType('image')"
+              >
+                图搜图
+              </button>
+            </div>
             <input
               @focus="onSearchFocus"
               v-model="keyword"
               ref="searchInputRef"
               :placeholder="placeholder"
+              :readonly="isGalleryContext && gallerySearchType === 'image'"
+              @click="handleSearchInputClick"
               @keyup.enter="search"
+            />
+            <input
+              v-if="isGalleryContext"
+              ref="galleryImageInputRef"
+              class="gallery-image-input"
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/bmp,image/webp"
+              @change="handleGalleryImageChange"
             />
             <div class="iconfont icon-search" @click="search"></div>
           </div>
-          <div class="history-panel" v-if="showHistory">
+          <div class="history-panel" v-if="showHistory && !isGalleryContext">
             <div class="search-title">
               <div class="title">搜索历史</div>
               <div class="btn-clean" @click="searchHistoryStore.cleanHistory()">
@@ -248,7 +274,16 @@ const loginHandler = () => {
   }
 };
 
-const placeholder = ref("xiaonanOuO");
+const isGalleryContext = computed(() => route.path.startsWith('/gallery'));
+const gallerySearchType = ref('text');
+const galleryImageFile = ref(null);
+const galleryImageInputRef = ref();
+const placeholder = computed(() => {
+  if (!isGalleryContext.value) {
+    return 'xiaonanOuO';
+  }
+  return gallerySearchType.value === 'image' ? '选择图片后搜索' : '搜索图库';
+});
 const keyword = ref();
 
 //历史搜索
@@ -262,6 +297,26 @@ const searchKeyword = (keyword) => {
 };
 
 const search = () => {
+  if (isGalleryContext.value) {
+    if (gallerySearchType.value === 'image') {
+      if (!galleryImageFile.value) {
+        galleryImageInputRef.value?.click();
+        return;
+      }
+      mitter.emit('galleryImageSearch', galleryImageFile.value);
+      showHistory.value = false;
+      return;
+    }
+    const galleryKeyword = (keyword.value || '').trim();
+    if (!galleryKeyword) {
+      router.replace({ path: '/gallery' });
+      showHistory.value = false;
+      return;
+    }
+    router.push({ path: '/gallery', query: { mode: 'text', keyword: galleryKeyword } });
+    showHistory.value = false;
+    return;
+  }
   if (!keyword.value) {
     keyword.value = placeholder.value;
   }
@@ -275,8 +330,74 @@ const search = () => {
 
 const showHistory = ref(false);
 const onSearchFocus = () => {
-  showHistory.value = true;
+  showHistory.value = !isGalleryContext.value;
 };
+
+const setGallerySearchType = (type) => {
+  gallerySearchType.value = type;
+  showHistory.value = false;
+  if (type === 'text') {
+    galleryImageFile.value = null;
+    if (galleryImageInputRef.value) {
+      galleryImageInputRef.value.value = '';
+    }
+    keyword.value = typeof route.query.keyword === 'string' ? route.query.keyword : '';
+  } else {
+    keyword.value = galleryImageFile.value?.name || '';
+  }
+};
+
+const handleSearchInputClick = () => {
+  if (isGalleryContext.value && gallerySearchType.value === 'image') {
+    galleryImageInputRef.value?.click();
+  }
+};
+
+const handleGalleryImageChange = (event) => {
+  const file = event.target.files?.[0];
+  if (!file) {
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    proxy.Message.warning('图片大小不能超过 10MB');
+    event.target.value = '';
+    return;
+  }
+  galleryImageFile.value = file;
+  keyword.value = file.name;
+};
+
+watch(
+  () => [route.query.mode, route.query.keyword],
+  ([mode, value]) => {
+    if (!isGalleryContext.value) {
+      return;
+    }
+    if (gallerySearchType.value === 'image' && galleryImageFile.value) {
+      keyword.value = galleryImageFile.value.name;
+      return;
+    }
+    if (mode === 'text' && typeof value === 'string') {
+      gallerySearchType.value = 'text';
+      keyword.value = value;
+      return;
+    }
+    gallerySearchType.value = 'text';
+    keyword.value = typeof value === 'string' ? value : '';
+  },
+  { immediate: true }
+);
+
+watch(
+  () => route.path,
+  () => {
+    if (!isGalleryContext.value) {
+      gallerySearchType.value = 'text';
+      galleryImageFile.value = null;
+      keyword.value = '';
+    }
+  }
+);
 
 const searchInputRef = ref();
 onMounted(() => {
@@ -367,6 +488,31 @@ const logout = () => {
           display: flex;
           align-items: center;
           background: #f1f2f3;
+          .gallery-mode-switch {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            flex-shrink: 0;
+            margin-left: 6px;
+            padding: 2px;
+            border-radius: 6px;
+            background: #fff;
+            button {
+              border: none;
+              border-radius: 4px;
+              background: transparent;
+              color: #61666d;
+              cursor: pointer;
+              font-size: 12px;
+              line-height: 24px;
+              min-width: 48px;
+              padding: 0px 6px;
+              &.active {
+                background: #409eff;
+                color: #fff;
+              }
+            }
+          }
           input {
             width: 100%;
             border: none;
@@ -377,6 +523,9 @@ const logout = () => {
             &:focus {
               outline: none;
             }
+          }
+          .gallery-image-input {
+            display: none;
           }
           .iconfont {
             font-size: 20px;

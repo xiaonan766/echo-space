@@ -13,6 +13,7 @@ import (
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	searchinfra "github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/search"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/service/gallerysearch"
 )
 
 type VideoInfoService struct {
@@ -20,6 +21,13 @@ type VideoInfoService struct {
 	settingStore        *cache.SysSettingStore
 	downloadGenerator   *VideoDownloadGenerator
 	videoSearch         *searchinfra.VideoIndex
+	gallerySearch       *gallerysearch.Service
+}
+
+func (s *VideoInfoService) SetGallerySearch(gallerySearch *gallerysearch.Service) {
+	if s != nil {
+		s.gallerySearch = gallerySearch
+	}
 }
 
 type VideoInfoListInput struct {
@@ -146,6 +154,9 @@ func (s *VideoInfoService) AuditVideo(ctx context.Context, input AuditVideoInput
 		return &BusinessError{Info: "\u89c6\u9891\u6587\u4ef6\u4e0d\u5b58\u5728\u6216\u672a\u8f6c\u7801\u5b8c\u6210"}
 	}
 	if err == nil && post.ContentType == domain.ContentTypeImage {
+		if s.gallerySearch != nil {
+			s.gallerySearch.ScheduleSync(input.VideoID)
+		}
 		return nil
 	}
 	if err == nil && input.Status == domain.VideoPostStatusApproved {

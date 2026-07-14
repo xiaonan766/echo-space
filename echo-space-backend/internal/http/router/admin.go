@@ -37,6 +37,7 @@ func registerAdminRoutes(group *gin.RouterGroup, deps Dependencies) {
 	videoInfoService := adminservice.NewVideoInfoService(videoPostRepository, videoSettingStore)
 	videoInfoService.SetDownloadGenerator(adminservice.NewVideoDownloadGenerator(videoPostRepository, deps.Config.File.ResourceRoot))
 	videoInfoService.SetVideoSearch(deps.VideoSearch)
+	videoInfoService.SetGallerySearch(deps.GallerySearch)
 	videoInfoHandler := adminhandler.NewVideoInfoHandler(videoInfoService)
 	fileHandler := filehandler.NewFileHandler(deps.Config.File, videoPostRepository)
 

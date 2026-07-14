@@ -41,7 +41,7 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 		webservice.WithSearchKeywordStore(deps.SearchKeywordStore),
 	)
 	videoHandler := webhandler.NewVideoHandler(videoService, accountService)
-	galleryService := webservice.NewGalleryService(galleryRepository)
+	galleryService := webservice.NewGalleryService(galleryRepository, deps.GallerySearch)
 	galleryHandler := webhandler.NewGalleryHandler(galleryService)
 	dynamicRepository := repository.NewDynamicRepository(deps.DB)
 	dynamicService := webservice.NewDynamicService(dynamicRepository, dynamicActiveStore)
@@ -139,6 +139,7 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	galleryGroup.POST("/loadImageList", galleryHandler.LoadImageList)
 	galleryGroup.GET("/getImageInfo", galleryHandler.GetImageInfo)
 	galleryGroup.POST("/getImageInfo", galleryHandler.GetImageInfo)
+	galleryGroup.POST("/search", galleryHandler.Search)
 
 	sysSettingGroup := group.Group("/sysSetting")
 	sysSettingGroup.GET("/getSetting", sysSettingHandler.GetSetting)

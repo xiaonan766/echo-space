@@ -21,6 +21,7 @@ type Config struct {
 	Admin         AdminConfig         `yaml:"admin"`
 	File          FileConfig          `yaml:"file"`
 	CommentReview CommentReviewConfig `yaml:"commentReview"`
+	GallerySearch GallerySearchConfig `yaml:"gallerySearch"`
 }
 
 type ServerConfig struct {
@@ -101,6 +102,35 @@ type CommentReviewConfig struct {
 	SensitiveWords []string `yaml:"sensitiveWords"`
 }
 
+type GallerySearchConfig struct {
+	MilvusAddress      string  `yaml:"milvusAddress"`
+	MilvusToken        string  `yaml:"milvusToken"`
+	MilvusCollection   string  `yaml:"milvusCollection"`
+	DashScopeAPIKey    string  `yaml:"dashScopeAPIKey"`
+	DashScopeBaseURL   string  `yaml:"dashScopeBaseURL"`
+	EmbeddingModel     string  `yaml:"embeddingModel"`
+	EmbeddingDimension int     `yaml:"embeddingDimension"`
+	MinScore           float64 `yaml:"minScore"`
+	QueryVectorTTL     string  `yaml:"queryVectorTTL"`
+	ReconcileInterval  string  `yaml:"reconcileInterval"`
+}
+
+func (c GallerySearchConfig) QueryVectorTTLDuration() time.Duration {
+	duration, err := time.ParseDuration(c.QueryVectorTTL)
+	if err != nil || duration <= 0 {
+		return 10 * time.Minute
+	}
+	return duration
+}
+
+func (c GallerySearchConfig) ReconcileIntervalDuration() time.Duration {
+	duration, err := time.ParseDuration(c.ReconcileInterval)
+	if err != nil || duration <= 0 {
+		return 10 * time.Minute
+	}
+	return duration
+}
+
 func Load() (Config, error) {
 	cfg := defaultConfig()
 	if err := loadYAML(&cfg); err != nil {
@@ -162,6 +192,16 @@ func defaultConfig() Config {
 				"贷款", "套现", "办证", "发票", "裸聊", "约炮", "色情", "成人网站",
 				"看片", "外挂", "破解", "盗版资源",
 			},
+		},
+		GallerySearch: GallerySearchConfig{
+			MilvusAddress:      "localhost:19530",
+			MilvusCollection:   "echo_space_gallery_image_v1",
+			DashScopeBaseURL:   "https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding",
+			EmbeddingModel:     "tongyi-embedding-vision-plus-2026-03-06",
+			EmbeddingDimension: 1152,
+			MinScore:           0.15,
+			QueryVectorTTL:     "10m",
+			ReconcileInterval:  "10m",
 		},
 	}
 }
@@ -235,6 +275,15 @@ func applyEnvOverrides(cfg *Config) {
 
 	cfg.File.ResourceRoot = envString("FILE_RESOURCE_ROOT", cfg.File.ResourceRoot)
 	cfg.File.MaxImageMB = envInt("FILE_MAX_IMAGE_MB", cfg.File.MaxImageMB)
+
+	cfg.GallerySearch.MilvusAddress = envString("MILVUS_ADDRESS", cfg.GallerySearch.MilvusAddress)
+	cfg.GallerySearch.MilvusToken = envString("MILVUS_TOKEN", cfg.GallerySearch.MilvusToken)
+	cfg.GallerySearch.MilvusCollection = envString("MILVUS_COLLECTION", cfg.GallerySearch.MilvusCollection)
+	cfg.GallerySearch.DashScopeAPIKey = envString("DASHSCOPE_API_KEY", cfg.GallerySearch.DashScopeAPIKey)
+	cfg.GallerySearch.DashScopeBaseURL = envString("DASHSCOPE_BASE_URL", cfg.GallerySearch.DashScopeBaseURL)
+	cfg.GallerySearch.MinScore = envFloat("GALLERY_SEARCH_MIN_SCORE", cfg.GallerySearch.MinScore)
+	cfg.GallerySearch.QueryVectorTTL = envString("GALLERY_SEARCH_VECTOR_TTL", cfg.GallerySearch.QueryVectorTTL)
+	cfg.GallerySearch.ReconcileInterval = envString("GALLERY_SEARCH_RECONCILE_INTERVAL", cfg.GallerySearch.ReconcileInterval)
 }
 
 func envString(key string, fallback string) string {
@@ -284,6 +333,18 @@ func envBool(key string, fallback bool) bool {
 	}
 
 	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envFloat(key string, fallback float64) float64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return fallback
 	}

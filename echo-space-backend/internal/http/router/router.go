@@ -12,6 +12,7 @@ import (
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/mq"
 	searchinfra "github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/search"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/service/gallerysearch"
 )
 
 type Dependencies struct {
@@ -23,6 +24,7 @@ type Dependencies struct {
 	SearchKeywordStore      *cache.SearchKeywordStore
 	StockLockPublisher      *mq.ShopStockLockPublisher
 	VideoTranscodePublisher *mq.VideoTranscodePublisher
+	GallerySearch           *gallerysearch.Service
 }
 
 func New(deps Dependencies) *gin.Engine {

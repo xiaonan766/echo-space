@@ -33,3 +33,6 @@ Thumbs.db
 
 # Runtime uploaded resources
 echo-space-backend/resources/
+
+# Milvus Standalone runtime data
+deploy/milvus/volumes/

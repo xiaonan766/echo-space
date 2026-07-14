@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -14,9 +15,11 @@ import (
 	approuter "github.com/xiaonan766/echo-space/echo-space-backend/internal/http/router"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/cache"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/database"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/embedding"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/mq"
 	searchinfra "github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/search"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/repository"
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/service/gallerysearch"
 	webservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/web"
 )
 
@@ -32,6 +35,7 @@ type App struct {
 	dynamicFeedConsumer       *mq.DynamicFeedConsumer
 	backgroundCancel          context.CancelFunc
 	router                    http.Handler
+	galleryVectorIndex        *searchinfra.GalleryVectorIndex
 }
 
 func New(ctx context.Context, cfg config.Config) (*App, error) {
@@ -67,6 +71,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	setupShopStockPrewarm(backgroundCtx, redisClient, mysqlDB)
 	videoSearch := setupVideoSearch(ctx, backgroundCtx, cfg, mysqlDB)
 	searchKeywordStore := cache.NewSearchKeywordStore(redisClient)
+	gallerySearch, galleryVectorIndex := setupGallerySearch(ctx, backgroundCtx, cfg, redisClient, mysqlDB)
 
 	router := approuter.New(approuter.Dependencies{
 		Config:                  cfg,
@@ -77,6 +82,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		SearchKeywordStore:      searchKeywordStore,
 		StockLockPublisher:      stockLockPublisher,
 		VideoTranscodePublisher: videoTranscodePublisher,
+		GallerySearch:           gallerySearch,
 	})
 
 	return &App{
@@ -91,6 +97,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		dynamicFeedConsumer:       dynamicFeedConsumer,
 		backgroundCancel:          backgroundCancel,
 		router:                    router,
+		galleryVectorIndex:        galleryVectorIndex,
 	}, nil
 }
 
@@ -117,6 +124,11 @@ func (a *App) Close() {
 	if a.rabbit != nil {
 		a.rabbit.Close()
 	}
+	if a.galleryVectorIndex != nil {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_ = a.galleryVectorIndex.Close(closeCtx)
+		cancel()
+	}
 	if a.cache != nil {
 		a.cache.Close()
 	}
@@ -124,6 +136,35 @@ func (a *App) Close() {
 		_ = a.redis.Close()
 	}
 	closeDB(a.db)
+}
+
+func setupGallerySearch(startupCtx, backgroundCtx context.Context, cfg config.Config, redisClient *redis.Client, mysqlDB *gorm.DB) (*gallerysearch.Service, *searchinfra.GalleryVectorIndex) {
+	galleryConfig := cfg.GallerySearch
+	embedder, err := embedding.NewDashScopeClient(galleryConfig.DashScopeAPIKey, galleryConfig.DashScopeBaseURL, galleryConfig.EmbeddingModel, galleryConfig.EmbeddingDimension, nil)
+	if err != nil {
+		log.Printf("gallery vector search is disabled: %v", err)
+		return nil, nil
+	}
+	setupCtx, cancel := context.WithTimeout(startupCtx, 15*time.Second)
+	defer cancel()
+	vectorIndex, err := searchinfra.NewGalleryVectorIndex(setupCtx, galleryConfig.MilvusAddress, galleryConfig.MilvusToken, galleryConfig.MilvusCollection, galleryConfig.EmbeddingDimension)
+	if err != nil {
+		log.Printf("gallery vector search is disabled: %v", err)
+		return nil, nil
+	}
+	if err := vectorIndex.EnsureCollection(setupCtx); err != nil {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_ = vectorIndex.Close(closeCtx)
+		closeCancel()
+		log.Printf("gallery vector search is disabled: %v", err)
+		return nil, nil
+	}
+	repo := repository.NewGalleryRepository(mysqlDB)
+	vectorStore := cache.NewGallerySearchVectorStore(redisClient, galleryConfig.QueryVectorTTLDuration(), galleryConfig.EmbeddingDimension)
+	service := gallerysearch.NewService(repo, embedder, vectorIndex, vectorStore, cfg.File.ResourceRoot, galleryConfig.EmbeddingModel, galleryConfig.MinScore, galleryConfig.ReconcileIntervalDuration())
+	service.Start(backgroundCtx)
+	log.Printf("gallery vector search initialized, collection=%s model=%s", galleryConfig.MilvusCollection, galleryConfig.EmbeddingModel)
+	return service, vectorIndex
 }
 
 func closeDB(db *gorm.DB) {

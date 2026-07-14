@@ -19,7 +19,8 @@ const Api = {
     loadRecommendVideo: server_web + "/video/loadRecommendVideo",
     loadVideo: server_web + "/video/loadVideo",
     loadGalleryImageList: server_web + "/gallery/loadImageList",
-    getGalleryImageInfo: server_web + "/gallery/getImageInfo",
+      getGalleryImageInfo: server_web + "/gallery/getImageInfo",
+      searchGallery: server_web + "/gallery/search",
 
     postVideo: server_web + "/ucenter/postVideo",
     saveVideoInteraction: server_web + "/ucenter/saveVideoInteraction",

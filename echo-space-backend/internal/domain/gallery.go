@@ -39,3 +39,25 @@ type GalleryImageDetail struct {
 	ImageInfo GalleryImageInfo   `json:"imageInfo"`
 	ImageList []GalleryImageFile `json:"imageList"`
 }
+
+type GalleryVectorSource struct {
+	FileID         string `gorm:"column:file_id"`
+	ImageID        string `gorm:"column:image_id"`
+	SourceName     string `gorm:"column:source_name"`
+	ContentVersion int64  `gorm:"column:content_version"`
+}
+
+type GallerySearchItem struct {
+	GalleryImageItem
+	MatchedImage string  `json:"matchedImage"`
+	Score        float32 `json:"-"`
+}
+
+type GallerySearchResult struct {
+	SearchToken string              `json:"searchToken"`
+	SearchType  string              `json:"searchType"`
+	PageNo      int                 `json:"pageNo"`
+	PageSize    int                 `json:"pageSize"`
+	HasMore     bool                `json:"hasMore"`
+	List        []GallerySearchItem `json:"list"`
+}

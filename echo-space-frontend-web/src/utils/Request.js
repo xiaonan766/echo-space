@@ -72,7 +72,7 @@ instance.interceptors.response.use(
 );
 
 const request = (config) => {
-    const { url, params, dataType, showLoading = false, responseType = responseTypeJson, showError = true } = config;
+    const { url, params, dataType, showLoading = false, responseType = responseTypeJson, showError = true, timeout } = config;
     let contentType = contentTypeForm;
     let formData = new FormData();// 创建form对象
     for (let key in params) {
@@ -98,6 +98,7 @@ const request = (config) => {
         showLoading: showLoading,
         errorCallback: config.errorCallback,
         showError: showError,
+        timeout: timeout,
     }).catch(error => {
         if (error.showError) {
             Message.error(error.msg);

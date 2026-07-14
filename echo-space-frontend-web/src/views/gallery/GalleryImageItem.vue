@@ -2,7 +2,7 @@
   <div class="gallery-image-item" :style="{ 'margin-top': marginTop + 'px' }">
     <router-link :to="`/gallery/${data.imageId}`" target="_blank">
       <div class="cover">
-        <Cover :source="data.imageCover" :scale="0.5625"></Cover>
+        <Cover :source="data.matchedImage || data.imageCover" :scale="0.5625"></Cover>
         <div class="shade">
           <div class="image-type">图片</div>
         </div>
