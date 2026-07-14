@@ -1,4 +1,4 @@
-后端：
+<img width="1919" height="987" alt="image" src="https://github.com/user-attachments/assets/4dc8f44f-2975-4c1b-b4d6-653318203981" />后端：
 
 语言：Go
 
@@ -80,7 +80,7 @@ Go 后端服务：http://localhost:7070
 首页：
 <img width="1918" height="978" alt="image" src="https://github.com/user-attachments/assets/8b1021ec-d898-47f1-adc9-fffaf99e18f7" />
 图库：
-<img width="1919" height="986" alt="image" src="https://github.com/user-attachments/assets/98591218-b560-45ac-94a4-6783fab21d7a" />
+<img width="1919" height="983" alt="image" src="https://github.com/user-attachments/assets/9418067a-dcc4-40c6-894f-2dd966a0c88b" />
 周边列表页面
 <img width="1905" height="982" alt="image" src="https://github.com/user-attachments/assets/0044a642-cd3d-412d-a8ae-1b18b9dd78b5" />
 周边详情页面
@@ -111,6 +111,13 @@ Go 后端服务：http://localhost:7070
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/cb0d7624-c76f-4b21-85db-3169e8c6952c" />
 搜索视频页面
 <img width="1919" height="982" alt="image" src="https://github.com/user-attachments/assets/f6388f5d-1581-4791-aafd-6999e0eb8c18" />
+向量数据库：
+<img width="1917" height="956" alt="image" src="https://github.com/user-attachments/assets/dfde6e8f-d1aa-43b8-8d8d-f94fe7a68e33" />
+图片以文搜图：
+<img width="1919" height="988" alt="image" src="https://github.com/user-attachments/assets/3b16c228-7b6a-4192-a6c5-fb0166ea580a" />
+图片以图搜图：
+<img width="1919" height="987" alt="image" src="https://github.com/user-attachments/assets/7f209742-1382-426e-b211-3182a0b16a6b" />
+<img width="1919" height="992" alt="image" src="https://github.com/user-attachments/assets/dd5798f1-8c28-455f-85cd-579a4e774776" />
 个人主页周边展示柜
 <img width="1919" height="985" alt="image" src="https://github.com/user-attachments/assets/ea3854f2-44e1-4a04-af65-e4a103d7462c" />
 <img width="1919" height="989" alt="image" src="https://github.com/user-attachments/assets/06701344-6d84-489b-99f5-002d081487c2" />
@@ -120,6 +127,8 @@ Go 后端服务：http://localhost:7070
 <img width="1919" height="979" alt="image" src="https://github.com/user-attachments/assets/d8a1a8d0-227a-4f33-bbbf-3f871c40e08a" />
 <img width="1919" height="987" alt="image" src="https://github.com/user-attachments/assets/e802467b-92d2-4a92-857b-8def1d67012e" />
 <img width="1919" height="980" alt="image" src="https://github.com/user-attachments/assets/e4ff6bbc-5538-4469-b4c9-55b299775a1e" />
+收藏列表页面
+<img width="1919" height="988" alt="image" src="https://github.com/user-attachments/assets/7807d874-4141-4b6f-af42-0c2740e49e98" />
 
 —— —— —— —— —— —— —— —— —— —— —— —— ——
 
