@@ -13,6 +13,7 @@ import (
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/mq"
 	searchinfra "github.com/xiaonan766/echo-space/echo-space-backend/internal/infra/search"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/service/gallerysearch"
+	webservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/web"
 )
 
 type Dependencies struct {
@@ -25,6 +26,8 @@ type Dependencies struct {
 	StockLockPublisher      *mq.ShopStockLockPublisher
 	VideoTranscodePublisher *mq.VideoTranscodePublisher
 	GallerySearch           *gallerysearch.Service
+	VideoHotMetricService   *webservice.VideoHotMetricService
+	VideoHotRankingService  *webservice.VideoHotRankingService
 }
 
 func New(deps Dependencies) *gin.Engine {

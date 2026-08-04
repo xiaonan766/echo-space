@@ -228,6 +228,7 @@ onMounted(() => {
     fileId.value = _fileId
     //获取在线人数
     reportVideoPlayOnline()
+    reportVideoPlayHot()
     player.switch = `${proxy.Api.getVideoResource}/${_fileId}/`
     //切换弹幕
     player.plugins.artplayerPluginDanmuku.load()
@@ -269,6 +270,23 @@ const reportVideoPlayOnline = async () => {
     return
   }
   onLineCount.value = result.data
+}
+
+const reportedHotVideoIds = new Set()
+const reportVideoPlayHot = async () => {
+  const videoId = route.params.videoId
+  if (!videoId || reportedHotVideoIds.has(videoId)) {
+    return
+  }
+  reportedHotVideoIds.add(videoId)
+  await proxy.Request({
+    url: proxy.Api.reportVideoPlayHot,
+    params: {
+      videoId,
+      deviceId: loginStore.deviceId,
+    },
+    showError: false,
+  })
 }
 
 const cleanTimer = () => {

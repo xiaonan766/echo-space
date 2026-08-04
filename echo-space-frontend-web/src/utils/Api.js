@@ -126,6 +126,7 @@ const Api = {
     readAll: server_interact + "/message/readAll",
     //上报在线人数
     reportVideoPlayOnline: server_interact + "/online/reportVideoPlayOnline",
+    reportVideoPlayHot: server_interact + "/online/reportVideoPlayHot",
     //点赞，评论，投币，评论，收藏
     userAction: server_interact + "/userAction/doAction",
 

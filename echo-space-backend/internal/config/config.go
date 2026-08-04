@@ -18,6 +18,7 @@ type Config struct {
 	MySQL         MySQLConfig         `yaml:"mysql"`
 	Elasticsearch ElasticsearchConfig `yaml:"elasticsearch"`
 	RabbitMQ      RabbitMQConfig      `yaml:"rabbitmq"`
+	VideoHot      VideoHotConfig      `yaml:"videoHot"`
 	Admin         AdminConfig         `yaml:"admin"`
 	File          FileConfig          `yaml:"file"`
 	CommentReview CommentReviewConfig `yaml:"commentReview"`
@@ -73,8 +74,32 @@ type RabbitMQConfig struct {
 	StockLockQueue         string `yaml:"stockLockQueue"`
 	VideoTranscodeQueue    string `yaml:"videoTranscodeQueue"`
 	DynamicFeedQueue       string `yaml:"dynamicFeedQueue"`
+	VideoHotMetricQueue    string `yaml:"videoHotMetricQueue"`
 	VideoTranscodePrefetch int    `yaml:"videoTranscodePrefetch"`
 	PrefetchCount          int    `yaml:"prefetchCount"`
+}
+
+type VideoHotConfig struct {
+	MetricsKeyPrefix string `yaml:"metricsKeyPrefix"`
+	RankKey          string `yaml:"rankKey"`
+	PlayDedupeTTL    string `yaml:"playDedupeTTL"`
+	BackfillInterval string `yaml:"backfillInterval"`
+}
+
+func (c VideoHotConfig) PlayDedupeTTLDuration() time.Duration {
+	duration, err := time.ParseDuration(c.PlayDedupeTTL)
+	if err != nil || duration <= 0 {
+		return 30 * time.Minute
+	}
+	return duration
+}
+
+func (c VideoHotConfig) BackfillIntervalDuration() time.Duration {
+	duration, err := time.ParseDuration(c.BackfillInterval)
+	if err != nil || duration <= 0 {
+		return 30 * time.Minute
+	}
+	return duration
 }
 
 type AdminConfig struct {
@@ -170,8 +195,15 @@ func defaultConfig() Config {
 			StockLockQueue:         "echo-space.shop.stock.lock",
 			VideoTranscodeQueue:    "echo-space.video.transcode",
 			DynamicFeedQueue:       "echo-space.dynamic.feed",
+			VideoHotMetricQueue:    "echo-space.video.hot.metric",
 			VideoTranscodePrefetch: 1,
 			PrefetchCount:          20,
+		},
+		VideoHot: VideoHotConfig{
+			MetricsKeyPrefix: "echo-space:video:hot:metrics:",
+			RankKey:          "echo-space:video:hot:rank",
+			PlayDedupeTTL:    "30m",
+			BackfillInterval: "30m",
 		},
 		Admin: AdminConfig{
 			Account:  "admin",
@@ -266,8 +298,14 @@ func applyEnvOverrides(cfg *Config) {
 	cfg.RabbitMQ.StockLockQueue = envString("RABBITMQ_STOCK_LOCK_QUEUE", cfg.RabbitMQ.StockLockQueue)
 	cfg.RabbitMQ.VideoTranscodeQueue = envString("RABBITMQ_VIDEO_TRANSCODE_QUEUE", cfg.RabbitMQ.VideoTranscodeQueue)
 	cfg.RabbitMQ.DynamicFeedQueue = envString("RABBITMQ_DYNAMIC_FEED_QUEUE", cfg.RabbitMQ.DynamicFeedQueue)
+	cfg.RabbitMQ.VideoHotMetricQueue = envString("RABBITMQ_VIDEO_HOT_METRIC_QUEUE", cfg.RabbitMQ.VideoHotMetricQueue)
 	cfg.RabbitMQ.VideoTranscodePrefetch = envInt("RABBITMQ_VIDEO_TRANSCODE_PREFETCH", cfg.RabbitMQ.VideoTranscodePrefetch)
 	cfg.RabbitMQ.PrefetchCount = envInt("RABBITMQ_PREFETCH_COUNT", cfg.RabbitMQ.PrefetchCount)
+
+	cfg.VideoHot.MetricsKeyPrefix = envString("VIDEO_HOT_METRICS_KEY_PREFIX", cfg.VideoHot.MetricsKeyPrefix)
+	cfg.VideoHot.RankKey = envString("VIDEO_HOT_RANK_KEY", cfg.VideoHot.RankKey)
+	cfg.VideoHot.PlayDedupeTTL = envString("VIDEO_HOT_PLAY_DEDUPE_TTL", cfg.VideoHot.PlayDedupeTTL)
+	cfg.VideoHot.BackfillInterval = envString("VIDEO_HOT_BACKFILL_INTERVAL", cfg.VideoHot.BackfillInterval)
 
 	cfg.Admin.Account = envString("ADMIN_ACCOUNT", cfg.Admin.Account)
 	cfg.Admin.Password = envString("ADMIN_PASSWORD", cfg.Admin.Password)

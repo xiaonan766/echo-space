@@ -29,8 +29,15 @@ rabbitmq:
   stockLockQueue: "echo-space.shop.stock.lock"
   videoTranscodeQueue: "echo-space.video.transcode"
   dynamicFeedQueue: "echo-space.dynamic.feed"
+  videoHotMetricQueue: "echo-space.video.hot.metric"
   videoTranscodePrefetch: 1
   prefetchCount: 20
+
+videoHot:
+  metricsKeyPrefix: "echo-space:video:hot:metrics:"
+  rankKey: "echo-space:video:hot:rank"
+  playDedupeTTL: "30m"
+  backfillInterval: "30m"
 
 admin:
   account: "admin"

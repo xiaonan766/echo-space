@@ -546,8 +546,13 @@ func (r *InteractRepository) CreateComment(ctx context.Context, comment *domain.
 	})
 }
 
-func (r *InteractRepository) SaveUserAction(ctx context.Context, action domain.UserAction) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+func (r *InteractRepository) SaveUserAction(ctx context.Context, action domain.UserAction) (domain.UserActionChange, error) {
+	change := domain.UserActionChange{
+		VideoID:    action.VideoID,
+		CommentID:  action.CommentID,
+		ActionType: action.ActionType,
+	}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var video domain.UserActionVideoTarget
 		err := tx.Table("video_info").
 			Select("video_id, user_id").
@@ -572,7 +577,12 @@ func (r *InteractRepository) SaveUserAction(ctx context.Context, action domain.U
 
 		switch action.ActionType {
 		case 2, 3:
-			return saveVideoToggleAction(tx, action, existingAction)
+			changeCount, err := saveVideoToggleAction(tx, action, existingAction)
+			if err != nil {
+				return err
+			}
+			change.VideoCountDelta = changeCount
+			return nil
 		case 4:
 			return saveVideoCoinAction(tx, action, existingAction)
 		case 0, 1:
@@ -581,6 +591,7 @@ func (r *InteractRepository) SaveUserAction(ctx context.Context, action domain.U
 			return nil
 		}
 	})
+	return change, err
 }
 
 func (r *InteractRepository) DeleteComment(ctx context.Context, comment domain.CommentDeleteInfo) error {
@@ -687,23 +698,23 @@ func findUserActionForUpdate(tx *gorm.DB, videoID string, commentID int, userID 
 	return &action, nil
 }
 
-func saveVideoToggleAction(tx *gorm.DB, action domain.UserAction, existingAction *domain.UserAction) error {
+func saveVideoToggleAction(tx *gorm.DB, action domain.UserAction, existingAction *domain.UserAction) (int, error) {
 	field, ok := videoActionCountField(action.ActionType)
 	if !ok {
-		return nil
+		return 0, nil
 	}
 
 	changeCount := 1
 	if existingAction != nil {
 		if err := tx.Delete(existingAction).Error; err != nil {
-			return err
+			return 0, err
 		}
 		changeCount = -1
 	} else if err := tx.Create(&action).Error; err != nil {
-		return err
+		return 0, err
 	}
 
-	return updateVideoCount(tx, action.VideoID, field, changeCount)
+	return changeCount, updateVideoCount(tx, action.VideoID, field, changeCount)
 }
 
 func saveVideoCoinAction(tx *gorm.DB, action domain.UserAction, existingAction *domain.UserAction) error {

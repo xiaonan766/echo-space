@@ -19,12 +19,13 @@ const (
 )
 
 type UserActionRepository interface {
-	SaveUserAction(ctx context.Context, action domain.UserAction) error
+	SaveUserAction(ctx context.Context, action domain.UserAction) (domain.UserActionChange, error)
 }
 
 type UserActionService struct {
-	repository UserActionRepository
-	now        func() time.Time
+	repository        UserActionRepository
+	hotMetricRecorder *VideoHotMetricService
+	now               func() time.Time
 }
 
 type DoUserActionInput struct {
@@ -35,11 +36,15 @@ type DoUserActionInput struct {
 	CommentID   int
 }
 
-func NewUserActionService(repository UserActionRepository) *UserActionService {
-	return &UserActionService{
+func NewUserActionService(repository UserActionRepository, hotMetricRecorder ...*VideoHotMetricService) *UserActionService {
+	service := &UserActionService{
 		repository: repository,
 		now:        time.Now,
 	}
+	if len(hotMetricRecorder) > 0 {
+		service.hotMetricRecorder = hotMetricRecorder[0]
+	}
+	return service
 }
 
 func (s *UserActionService) DoAction(ctx context.Context, input DoUserActionInput) error {
@@ -51,7 +56,7 @@ func (s *UserActionService) DoAction(ctx context.Context, input DoUserActionInpu
 		return errors.New("user action service is not ready")
 	}
 
-	err := s.repository.SaveUserAction(ctx, domain.UserAction{
+	change, err := s.repository.SaveUserAction(ctx, domain.UserAction{
 		VideoID:     input.VideoID,
 		CommentID:   input.CommentID,
 		ActionType:  input.ActionType,
@@ -61,6 +66,9 @@ func (s *UserActionService) DoAction(ctx context.Context, input DoUserActionInpu
 	})
 	if err != nil {
 		return mapUserActionRepositoryError(err)
+	}
+	if input.ActionType == actionVideoLike && change.VideoCountDelta != 0 && s.hotMetricRecorder != nil {
+		s.hotMetricRecorder.RecordMetric(ctx, input.VideoID, domain.VideoHotMetricEventLike, change.VideoCountDelta)
 	}
 	return nil
 }

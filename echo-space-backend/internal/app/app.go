@@ -33,6 +33,7 @@ type App struct {
 	shopStockLockConsumer     *mq.ShopStockLockConsumer
 	videoTranscodeConsumer    *mq.VideoTranscodeConsumer
 	dynamicFeedConsumer       *mq.DynamicFeedConsumer
+	videoHotMetricConsumer    *mq.VideoHotMetricConsumer
 	backgroundCancel          context.CancelFunc
 	router                    http.Handler
 	galleryVectorIndex        *searchinfra.GalleryVectorIndex
@@ -69,6 +70,8 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	dynamicFeedConsumer := setupDynamicFeed(backgroundCtx, cfg, redisClient, mysqlDB, rabbitClient)
 	setupShopOrderRecovery(backgroundCtx, redisClient, mysqlDB, stockLockPublisher)
 	setupShopStockPrewarm(backgroundCtx, redisClient, mysqlDB)
+	videoRepository := repository.NewVideoRepository(mysqlDB)
+	videoHotMetricService, videoHotRankingService, videoHotMetricConsumer := setupVideoHot(backgroundCtx, cfg, redisClient, mysqlDB, rabbitClient, videoRepository)
 	videoSearch := setupVideoSearch(ctx, backgroundCtx, cfg, mysqlDB)
 	searchKeywordStore := cache.NewSearchKeywordStore(redisClient)
 	gallerySearch, galleryVectorIndex := setupGallerySearch(ctx, backgroundCtx, cfg, redisClient, mysqlDB)
@@ -83,6 +86,8 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		StockLockPublisher:      stockLockPublisher,
 		VideoTranscodePublisher: videoTranscodePublisher,
 		GallerySearch:           gallerySearch,
+		VideoHotMetricService:   videoHotMetricService,
+		VideoHotRankingService:  videoHotRankingService,
 	})
 
 	return &App{
@@ -95,6 +100,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		shopStockLockConsumer:     shopStockLockConsumer,
 		videoTranscodeConsumer:    videoTranscodeConsumer,
 		dynamicFeedConsumer:       dynamicFeedConsumer,
+		videoHotMetricConsumer:    videoHotMetricConsumer,
 		backgroundCancel:          backgroundCancel,
 		router:                    router,
 		galleryVectorIndex:        galleryVectorIndex,
@@ -117,6 +123,9 @@ func (a *App) Close() {
 	}
 	if a.dynamicFeedConsumer != nil {
 		a.dynamicFeedConsumer.Close()
+	}
+	if a.videoHotMetricConsumer != nil {
+		a.videoHotMetricConsumer.Close()
 	}
 	if a.shopCacheRecoveryConsumer != nil {
 		a.shopCacheRecoveryConsumer.Close()
@@ -226,6 +235,33 @@ func setupDynamicFeed(ctx context.Context, cfg config.Config, redisClient *redis
 	service.StartOutboxPublisher(ctx)
 	log.Printf("dynamic feed consumer started, queue=%s", cfg.RabbitMQ.DynamicFeedQueue)
 	return consumer
+}
+
+func setupVideoHot(ctx context.Context, cfg config.Config, redisClient *redis.Client, mysqlDB *gorm.DB, rabbitClient *mq.RabbitClient, videoRepository *repository.VideoRepository) (*webservice.VideoHotMetricService, *webservice.VideoHotRankingService, *mq.VideoHotMetricConsumer) {
+	videoHotStore := cache.NewVideoHotStore(redisClient, cfg.VideoHot)
+	videoHotRankingService := webservice.NewVideoHotRankingService(videoRepository, videoHotStore, cfg.VideoHot.BackfillIntervalDuration())
+	var videoHotPublisher webservice.VideoHotMetricPublisher
+	if rabbitClient != nil {
+		videoHotPublisher = mq.NewVideoHotMetricPublisher(rabbitClient, cfg.RabbitMQ.VideoHotMetricQueue)
+	}
+	videoHotMetricService := webservice.NewVideoHotMetricService(videoRepository, videoHotStore, videoHotRankingService, videoHotPublisher)
+	var videoHotMetricConsumer *mq.VideoHotMetricConsumer
+
+	if rabbitClient != nil {
+		consumer := mq.NewVideoHotMetricConsumer(rabbitClient, cfg.RabbitMQ.VideoHotMetricQueue, cfg.RabbitMQ.PrefetchCount, videoHotMetricService)
+		if err := consumer.Start(ctx); err != nil {
+			log.Printf("start video hot metric consumer failed: %v", err)
+		} else {
+			videoHotMetricConsumer = consumer
+			log.Printf("video hot metric consumer started, queue=%s", cfg.RabbitMQ.VideoHotMetricQueue)
+		}
+	} else {
+		log.Printf("video hot metric publisher is disabled because rabbitmq is not configured")
+	}
+
+	videoHotRankingService.StartBackfillTasks(ctx)
+	log.Printf("video hot ranking backfill tasks started, interval=%s", cfg.VideoHot.BackfillIntervalDuration())
+	return videoHotMetricService, videoHotRankingService, videoHotMetricConsumer
 }
 
 func setupShopCacheRecovery(ctx context.Context, cfg config.Config, hybridCache *cache.HybridCache, redisClient *redis.Client, mysqlDB *gorm.DB, rabbitClient *mq.RabbitClient) *mq.ShopCacheRecoveryConsumer {

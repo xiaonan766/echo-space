@@ -5,13 +5,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/xiaonan766/echo-space/echo-space-backend/internal/domain"
 	"github.com/xiaonan766/echo-space/echo-space-backend/internal/http/response"
 	webservice "github.com/xiaonan766/echo-space/echo-space-backend/internal/service/web"
 )
 
 type VideoHandler struct {
-	videoService   *webservice.VideoService
-	accountService *webservice.AccountService
+	videoService      *webservice.VideoService
+	accountService    *webservice.AccountService
+	hotRankingService *webservice.VideoHotRankingService
 }
 
 func NewVideoHandler(videoService *webservice.VideoService, accountService ...*webservice.AccountService) *VideoHandler {
@@ -19,6 +21,12 @@ func NewVideoHandler(videoService *webservice.VideoService, accountService ...*w
 	if len(accountService) > 0 {
 		handler.accountService = accountService[0]
 	}
+	return handler
+}
+
+func NewVideoHandlerWithHot(videoService *webservice.VideoService, hotRankingService *webservice.VideoHotRankingService, accountService ...*webservice.AccountService) *VideoHandler {
+	handler := NewVideoHandler(videoService, accountService...)
+	handler.hotRankingService = hotRankingService
 	return handler
 }
 
@@ -119,6 +127,27 @@ func (h *VideoHandler) LoadVideoPList(c *gin.Context) {
 			return
 		}
 		log.Printf("web load video p list: %v", err)
+		response.ServerError(c, nil)
+		return
+	}
+
+	response.Success(c, result)
+}
+
+func (h *VideoHandler) LoadHotVideoList(c *gin.Context) {
+	pageNo := parseWebIntWithDefault(formOrQuery(c, "pageNo"), 1)
+	pageSize := parseWebIntWithDefault(formOrQuery(c, "pageSize"), 20)
+	if h.hotRankingService == nil {
+		response.Success(c, domain.NewPaginationResult([]domain.WebHotVideoItem{}, 0, pageNo, pageSize))
+		return
+	}
+
+	result, err := h.hotRankingService.LoadHotVideoList(c.Request.Context(), webservice.HotVideoListInput{
+		PageNo:   pageNo,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		log.Printf("web load hot video list: %v", err)
 		response.ServerError(c, nil)
 		return
 	}

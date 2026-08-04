@@ -3,13 +3,25 @@
     <div class="hot-part-title-panel">
       <div class="hot-24">
         <div class="iconfont icon-hot"></div>
-        <div>24小时热榜</div>
+        <div>实时热榜</div>
       </div>
     </div>
     <div class="data-list">
-      <DataLoadMoreList :dataSource="dataSource" :loading="loadingData" @loadData="loadDataList" :gridCount="2">
+      <DataLoadMoreList
+        :dataSource="dataSource"
+        :loading="loadingData"
+        @loadData="loadDataList"
+        :gridCount="2"
+        noDataMsg="暂无热榜视频"
+      >
         <template #default="{ data }">
-          <VideoItem :data="data" :marginTop="20" :layoutType="1"></VideoItem>
+          <div class="hot-video-item">
+            <div class="hot-rank-info">
+              <span class="rank">NO.{{ data.rank || '-' }}</span>
+              <span class="heat">{{ data.heatScore || 0 }} 热度</span>
+            </div>
+            <VideoItem :data="data" :marginTop="12" :layoutType="1"></VideoItem>
+          </div>
         </template>
       </DataLoadMoreList>
     </div>
@@ -17,20 +29,25 @@
 </template>
 
 <script setup>
-import { ref, reactive, getCurrentInstance, nextTick } from 'vue'
+import { ref, getCurrentInstance } from 'vue'
+
 const { proxy } = getCurrentInstance()
-import { useRoute, useRouter } from 'vue-router'
-const route = useRoute()
-const router = useRouter()
 
 const loadingData = ref(false)
-const dataSource = ref({})
+const dataSource = ref({
+  pageNo: 1,
+  pageSize: 20,
+  pageTotal: 0,
+  list: [],
+})
+
 const loadDataList = async () => {
-  let params = {
+  const params = {
     pageNo: dataSource.value.pageNo,
+    pageSize: dataSource.value.pageSize,
   }
   loadingData.value = true
-  let result = await proxy.Request({
+  const result = await proxy.Request({
     url: proxy.Api.hotVideoList,
     params,
   })
@@ -38,12 +55,22 @@ const loadDataList = async () => {
   if (!result) {
     return
   }
-  const dataList = dataSource.value.list
-  dataSource.value = Object.assign({}, result.data)
+
+  const currentList = dataSource.value.list || []
+  dataSource.value = Object.assign(
+    {
+      pageNo: 1,
+      pageSize: 20,
+      pageTotal: 0,
+      list: [],
+    },
+    result.data
+  )
   if (result.data.pageNo > 1) {
-    dataSource.value.list = dataList.concat(result.data.list)
+    dataSource.value.list = currentList.concat(result.data.list || [])
   }
 }
+
 loadDataList()
 </script>
 
@@ -84,6 +111,21 @@ loadDataList()
   }
   .data-list {
     margin-top: 10px;
+    .hot-video-item {
+      padding: 8px 0px 12px;
+      border-bottom: 1px solid #f1f2f3;
+      .hot-rank-info {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #9499a0;
+        font-size: 13px;
+        .rank {
+          color: #f07775;
+          font-weight: 600;
+        }
+      }
+    }
   }
 }
 </style>

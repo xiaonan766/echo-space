@@ -213,6 +213,31 @@ func TestLoadDanmuRouteDoesNotRequireLogin(t *testing.T) {
 	}
 }
 
+func TestLoadHotVideoListRouteDoesNotRequireLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/web/video/loadHotVideoList", strings.NewReader("pageNo=1&pageSize=20"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code == response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want non-login response", result.Code)
+	}
+	if result.Code != response.CodeSuccess {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeSuccess)
+	}
+}
+
 func TestPostCommentRouteRequiresLogin(t *testing.T) {
 	cfg := config.Config{}
 	cfg.Server.Mode = "test"
@@ -288,6 +313,31 @@ func TestReportVideoPlayOnlineRouteDoesNotRequireLogin(t *testing.T) {
 	engine := New(Dependencies{Config: cfg})
 
 	request := httptest.NewRequest(http.MethodPost, "/interact/online/reportVideoPlayOnline", strings.NewReader("fileId=VM1M5t5IsNy9bLRWM1ji&deviceId=device-1"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var result response.VO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Code == response.CodeLoginTimeout {
+		t.Fatalf("response code = %d, want non-login response", result.Code)
+	}
+	if result.Code != response.CodeSuccess {
+		t.Fatalf("response code = %d, want %d", result.Code, response.CodeSuccess)
+	}
+}
+
+func TestReportVideoPlayHotRouteDoesNotRequireLogin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Server.Mode = "test"
+	engine := New(Dependencies{Config: cfg})
+
+	request := httptest.NewRequest(http.MethodPost, "/interact/online/reportVideoPlayHot", strings.NewReader("videoId=Abc123Def4&deviceId=device-1"))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, request)

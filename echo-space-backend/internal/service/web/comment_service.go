@@ -43,9 +43,10 @@ type CommentRepository interface {
 }
 
 type CommentService struct {
-	repository   CommentRepository
-	reviewConfig config.CommentReviewConfig
-	now          func() time.Time
+	repository        CommentRepository
+	reviewConfig      config.CommentReviewConfig
+	hotMetricRecorder *VideoHotMetricService
+	now               func() time.Time
 }
 
 type PostCommentInput struct {
@@ -79,12 +80,16 @@ type commentCursorPayload struct {
 	LastLikeCount int    `json:"lastLikeCount,omitempty"`
 }
 
-func NewCommentService(repository CommentRepository, reviewConfig config.CommentReviewConfig) *CommentService {
-	return &CommentService{
+func NewCommentService(repository CommentRepository, reviewConfig config.CommentReviewConfig, hotMetricRecorder ...*VideoHotMetricService) *CommentService {
+	service := &CommentService{
 		repository:   repository,
 		reviewConfig: normalizeCommentReviewConfig(reviewConfig),
 		now:          time.Now,
 	}
+	if len(hotMetricRecorder) > 0 {
+		service.hotMetricRecorder = hotMetricRecorder[0]
+	}
+	return service
 }
 
 func (s *CommentService) LoadComment(ctx context.Context, input LoadCommentInput) (*LoadCommentResult, error) {
@@ -325,6 +330,9 @@ func (s *CommentService) PostComment(ctx context.Context, input PostCommentInput
 
 	if err := s.repository.CreateComment(ctx, comment); err != nil {
 		return nil, err
+	}
+	if comment.PCommentID == 0 && s.hotMetricRecorder != nil {
+		s.hotMetricRecorder.RecordMetric(ctx, input.VideoID, domain.VideoHotMetricEventComment, 1)
 	}
 
 	result.CommentID = comment.CommentID

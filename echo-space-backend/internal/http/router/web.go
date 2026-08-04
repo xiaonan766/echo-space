@@ -40,7 +40,7 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 		webservice.WithVideoSearch(deps.VideoSearch),
 		webservice.WithSearchKeywordStore(deps.SearchKeywordStore),
 	)
-	videoHandler := webhandler.NewVideoHandler(videoService, accountService)
+	videoHandler := webhandler.NewVideoHandlerWithHot(videoService, deps.VideoHotRankingService, accountService)
 	galleryService := webservice.NewGalleryService(galleryRepository, deps.GallerySearch)
 	galleryHandler := webhandler.NewGalleryHandler(galleryService)
 	dynamicRepository := repository.NewDynamicRepository(deps.DB)
@@ -52,13 +52,13 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	danmuLimiter := cache.NewDanmuRateLimiter(deps.Redis)
 	danmuService := webservice.NewDanmuService(interactRepository, sysSettingStore, danmuLimiter)
 	danmuHandler := webhandler.NewDanmuHandler(danmuService)
-	commentService := webservice.NewCommentService(interactRepository, deps.Config.CommentReview)
+	commentService := webservice.NewCommentService(interactRepository, deps.Config.CommentReview, deps.VideoHotMetricService)
 	commentHandler := webhandler.NewCommentHandler(commentService, accountService)
-	userActionService := webservice.NewUserActionService(interactRepository)
+	userActionService := webservice.NewUserActionService(interactRepository, deps.VideoHotMetricService)
 	userActionHandler := webhandler.NewUserActionHandler(userActionService)
 	videoOnlineStore := cache.NewVideoOnlineStore(deps.Redis)
 	videoOnlineService := webservice.NewVideoOnlineService(videoOnlineStore)
-	onlineHandler := webhandler.NewOnlineHandler(videoOnlineService)
+	onlineHandler := webhandler.NewOnlineHandler(videoOnlineService, deps.VideoHotMetricService)
 	statisticsRepository := repository.NewStatisticsRepository(deps.DB)
 	statisticsService := webservice.NewStatisticsService(statisticsRepository)
 	statisticsHandler := webhandler.NewStatisticsHandler(statisticsService)
@@ -133,6 +133,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	videoGroup.POST("/getVideoInfo", videoHandler.GetVideoInfo)
 	videoGroup.GET("/loadVideoPList", videoHandler.LoadVideoPList)
 	videoGroup.POST("/loadVideoPList", videoHandler.LoadVideoPList)
+	videoGroup.GET("/loadHotVideoList", videoHandler.LoadHotVideoList)
+	videoGroup.POST("/loadHotVideoList", videoHandler.LoadHotVideoList)
 
 	galleryGroup := group.Group("/gallery")
 	galleryGroup.GET("/loadImageList", galleryHandler.LoadImageList)
@@ -172,6 +174,8 @@ func registerWebRoutes(group *gin.RouterGroup, fileGroup *gin.RouterGroup, inter
 	onlineGroup := interactGroup.Group("/online")
 	onlineGroup.GET("/reportVideoPlayOnline", onlineHandler.ReportVideoPlayOnline)
 	onlineGroup.POST("/reportVideoPlayOnline", onlineHandler.ReportVideoPlayOnline)
+	onlineGroup.GET("/reportVideoPlayHot", onlineHandler.ReportVideoPlayHot)
+	onlineGroup.POST("/reportVideoPlayHot", onlineHandler.ReportVideoPlayHot)
 
 	shopGroup := group.Group("/shop")
 	shopGroup.GET("/loadRecommend", shopHandler.LoadRecommend)
