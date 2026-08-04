@@ -2,7 +2,7 @@
 
 ## 需求背景
 
-本次新增 Web 端实时累计视频热榜，用于在 `/hot` 页面展示当前站内热视频。热度不再只依赖单一播放量，而是综合播放量、点赞量、评论量三类行为指标计算，并通过 RabbitMQ 异步削峰，避免播放、点赞、评论主流程被排行榜缓存写入拖慢。
+本次新增 Web 端实时累计视频热榜，用于在 `/hot` 页面展示当前站内热视频。热度不再只依赖单一播放量，而是综合播放量、点赞量、收藏量、投币量、评论量五类行为指标计算，并通过 RabbitMQ 异步削峰，避免播放、点赞、收藏、投币、评论主流程被排行榜缓存写入拖慢。
 
 榜单口径为实时累计榜，不做 24 小时滑动窗口和时间衰减。播放行为在用户开始播放时上报，同一 `deviceId + videoId` 默认 30 分钟内只计一次。
 
@@ -10,14 +10,14 @@
 
 后端按职责拆成两个模块：
 
-- 指标统计模块：播放、点赞、评论先统一封装为指标事件，通过 RabbitMQ 投递；消费者幂等消费后聚合到 Redis Hash。
-- 排名计算模块：读取 Redis Hash 中的播放量、点赞量、评论量，按固定公式计算热度值，再写入 Redis ZSet 排行榜。
+- 指标统计模块：播放、点赞、收藏、投币、评论先统一封装为指标事件，通过 RabbitMQ 投递；消费者幂等消费后聚合到 Redis Hash。
+- 排名计算模块：读取 Redis Hash 中的播放量、点赞量、收藏量、投币量、评论量，按固定公式计算热度值，再写入 Redis ZSet 排行榜。
 
 数据流如下：
 
 ```mermaid
 flowchart LR
-    A["播放 / 点赞 / 评论行为"] --> B["统一指标事件"]
+    A["播放 / 点赞 / 收藏 / 投币 / 评论行为"] --> B["统一指标事件"]
     B --> C["RabbitMQ 异步队列"]
     C --> D["指标统计消费者"]
     D --> E["Redis Hash: metrics"]
@@ -30,7 +30,7 @@ flowchart LR
 热度公式固定为：
 
 ```text
-heatScore = playCount * 1 + likeCount * 5 + commentCount * 8
+heatScore = playCount * 1 + likeCount * 5 + collectCount * 5 + coinCount * 6 + commentCount * 8
 ```
 
 ## 核心改动文件
@@ -49,9 +49,11 @@ heatScore = playCount * 1 + likeCount * 5 + commentCount * 8
 - `echo-space-backend/internal/repository/video_repository.go`
   - 新增播放量增量更新、热榜指标快照查询、DB 降级热榜分页查询。
 - `echo-space-backend/internal/repository/interact_repository.go`
-  - 点赞/取消点赞返回本次视频计数变化量，供指标事件使用。
+  - 点赞、收藏、投币返回本次视频计数变化量，供指标事件使用。
 - `echo-space-backend/internal/service/web/user_action_service.go`
   - 点赞、取消点赞业务成功后投递 `like +1/-1` 指标事件。
+  - 收藏、取消收藏业务成功后投递 `collect +1/-1` 指标事件。
+  - 投币业务成功后投递 `coin +actionCount` 指标事件。
 - `echo-space-backend/internal/service/web/comment_service.go`
   - 一级评论创建成功后投递 `comment +1` 指标事件。
 - `echo-space-backend/internal/http/handler/web/video_handler.go`
@@ -126,7 +128,7 @@ heatScore = playCount * 1 + likeCount * 5 + commentCount * 8
 | --- | --- | --- |
 | `eventId` | string | 事件唯一 ID，用于消费幂等 |
 | `videoId` | string | 视频 ID |
-| `eventType` | string | 指标类型：`play`、`like`、`comment` |
+| `eventType` | string | 指标类型：`play`、`like`、`collect`、`coin`、`comment` |
 | `delta` | number | 指标增量 |
 | `occurredAt` | datetime | 事件发生时间 |
 
@@ -135,6 +137,9 @@ heatScore = playCount * 1 + likeCount * 5 + commentCount * 8
 - 播放开始：`play +1`
 - 点赞成功：`like +1`
 - 取消点赞成功：`like -1`
+- 收藏成功：`collect +1`
+- 取消收藏成功：`collect -1`
+- 投币成功：`coin +actionCount`
 - 一级评论创建成功：`comment +1`
 
 评论回复本期不计入评论热度指标，避免回复楼中楼导致评论热度被放大。
@@ -150,9 +155,11 @@ heatScore = playCount * 1 + likeCount * 5 + commentCount * 8
 | --- | --- |
 | `playCount` | 播放量 |
 | `likeCount` | 点赞量 |
+| `collectCount` | 收藏量 |
+| `coinCount` | 投币量 |
 | `commentCount` | 评论量 |
 
-消费者聚合指标时使用 Redis 原子脚本递增，并对负数结果做兜底保护，避免取消点赞等负向事件把指标扣到 0 以下。
+消费者聚合指标时使用 Redis 原子脚本递增，并对负数结果做兜底保护，避免取消点赞、取消收藏等负向事件把指标扣到 0 以下。
 
 ### 排行榜 ZSet
 
@@ -183,7 +190,7 @@ heatScore = playCount * 1 + likeCount * 5 + commentCount * 8
   - 消费成功后确认消息。
   - 处理失败返回错误，由现有消费者流程决定重试。
 
-如果 RabbitMQ 未配置或发布失败，服务会尝试降级为本进程直接处理事件；若 Redis 同时不可用，则只记录日志，不阻塞原播放、点赞、评论流程。
+如果 RabbitMQ 未配置或发布失败，服务会尝试降级为本进程直接处理事件；若 Redis 同时不可用，则只记录日志，不阻塞原播放、点赞、收藏、投币、评论流程。
 
 ## 配置变化
 
@@ -215,12 +222,12 @@ videoHot:
 MySQL 原有计数字段继续保留：
 
 - 播放指标消费成功后，会同步增量更新 `video_info.play_count`。
-- 点赞、评论的 MySQL 计数仍由原业务事务维护。
+- 点赞、收藏、投币、评论的 MySQL 计数仍由原业务事务维护。
 - Redis 或 ZSet 不可用时，热榜接口会使用 MySQL 原有计数字段按同一热度公式降级查询。
 
 ## 回算与降级
 
-应用启动后会触发一次热榜回算，并按 `videoHot.backfillInterval` 周期性从 `video_info` 批量读取播放量、点赞量、评论量，回写 Redis Hash 和 ZSet。
+应用启动后会触发一次热榜回算，并按 `videoHot.backfillInterval` 周期性从 `video_info` 批量读取播放量、点赞量、收藏量、投币量、评论量，回写 Redis Hash 和 ZSet。
 
 降级策略：
 
@@ -264,7 +271,9 @@ npm run build
 - 同一设备 30 分钟内重复播放同一视频，只增加一次播放热度。
 - 点赞后 `likeCount` 增加，取消点赞后 `likeCount` 减少，ZSet 分数随之变化。
 - 创建一级评论后 `commentCount` 增加，回复评论不增加热度评论指标。
-- 关闭 Redis 或 RabbitMQ 时，播放、点赞、评论主流程不崩溃；恢复后可通过启动/定时回算修复热榜缓存。
+- 收藏后 `collectCount` 增加，取消收藏后 `collectCount` 减少，ZSet 分数随之变化。
+- 投币后 `coinCount` 按投币数量增加，ZSet 分数随之变化。
+- 关闭 Redis 或 RabbitMQ 时，播放、点赞、收藏、投币、评论主流程不崩溃；恢复后可通过启动/定时回算修复热榜缓存。
 
 ## 遗留风险
 

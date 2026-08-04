@@ -67,8 +67,8 @@ func (s *UserActionService) DoAction(ctx context.Context, input DoUserActionInpu
 	if err != nil {
 		return mapUserActionRepositoryError(err)
 	}
-	if input.ActionType == actionVideoLike && change.VideoCountDelta != 0 && s.hotMetricRecorder != nil {
-		s.hotMetricRecorder.RecordMetric(ctx, input.VideoID, domain.VideoHotMetricEventLike, change.VideoCountDelta)
+	if eventType, ok := videoHotMetricEventType(input.ActionType); ok && change.VideoCountDelta != 0 && s.hotMetricRecorder != nil {
+		s.hotMetricRecorder.RecordMetric(ctx, input.VideoID, eventType, change.VideoCountDelta)
 	}
 	return nil
 }
@@ -140,4 +140,17 @@ func isSupportedUserAction(actionType int) bool {
 
 func isCommentUserAction(actionType int) bool {
 	return actionType == actionCommentLike || actionType == actionCommentHate
+}
+
+func videoHotMetricEventType(actionType int) (string, bool) {
+	switch actionType {
+	case actionVideoLike:
+		return domain.VideoHotMetricEventLike, true
+	case actionVideoCollect:
+		return domain.VideoHotMetricEventCollect, true
+	case actionVideoCoin:
+		return domain.VideoHotMetricEventCoin, true
+	default:
+		return "", false
+	}
 }

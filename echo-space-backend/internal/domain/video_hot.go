@@ -5,6 +5,8 @@ import "time"
 const (
 	VideoHotMetricEventPlay    = "play"
 	VideoHotMetricEventLike    = "like"
+	VideoHotMetricEventCollect = "collect"
+	VideoHotMetricEventCoin    = "coin"
 	VideoHotMetricEventComment = "comment"
 )
 
@@ -20,6 +22,8 @@ type VideoHotMetrics struct {
 	VideoID      string `gorm:"column:video_id" json:"videoId"`
 	PlayCount    int    `gorm:"column:play_count" json:"playCount"`
 	LikeCount    int    `gorm:"column:like_count" json:"likeCount"`
+	CollectCount int    `gorm:"column:collect_count" json:"collectCount"`
+	CoinCount    int    `gorm:"column:coin_count" json:"coinCount"`
 	CommentCount int    `gorm:"column:comment_count" json:"commentCount"`
 }
 

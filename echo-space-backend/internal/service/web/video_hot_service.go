@@ -369,6 +369,8 @@ func (s *VideoHotRankingService) loadHotVideosFromDB(ctx context.Context, input 
 			VideoID:      video.VideoID,
 			PlayCount:    video.PlayCount,
 			LikeCount:    video.LikeCount,
+			CollectCount: video.CollectCount,
+			CoinCount:    video.CoinCount,
 			CommentCount: video.CommentCount,
 		}
 		list = append(list, domain.WebHotVideoItem{
@@ -382,7 +384,11 @@ func (s *VideoHotRankingService) loadHotVideosFromDB(ctx context.Context, input 
 
 func CalculateVideoHeatScore(metrics domain.VideoHotMetrics) int64 {
 	metrics = normalizeVideoHotMetrics(metrics)
-	return int64(metrics.PlayCount) + int64(metrics.LikeCount)*5 + int64(metrics.CommentCount)*8
+	return int64(metrics.PlayCount) +
+		int64(metrics.LikeCount)*5 +
+		int64(metrics.CollectCount)*5 +
+		int64(metrics.CoinCount)*6 +
+		int64(metrics.CommentCount)*8
 }
 
 func normalizeReportVideoPlayHotInput(input ReportVideoPlayHotInput) ReportVideoPlayHotInput {
@@ -452,6 +458,14 @@ func validateVideoHotMetricEvent(event domain.VideoHotMetricEvent) error {
 		if event.Delta == 0 {
 			return errors.New("video hot like delta must not be zero")
 		}
+	case domain.VideoHotMetricEventCollect:
+		if event.Delta == 0 {
+			return errors.New("video hot collect delta must not be zero")
+		}
+	case domain.VideoHotMetricEventCoin:
+		if event.Delta <= 0 {
+			return errors.New("video hot coin delta must be positive")
+		}
 	default:
 		return errors.New("video hot metric event type is unsupported")
 	}
@@ -465,6 +479,12 @@ func normalizeVideoHotMetrics(metrics domain.VideoHotMetrics) domain.VideoHotMet
 	}
 	if metrics.LikeCount < 0 {
 		metrics.LikeCount = 0
+	}
+	if metrics.CollectCount < 0 {
+		metrics.CollectCount = 0
+	}
+	if metrics.CoinCount < 0 {
+		metrics.CoinCount = 0
 	}
 	if metrics.CommentCount < 0 {
 		metrics.CommentCount = 0

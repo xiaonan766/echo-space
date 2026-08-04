@@ -54,6 +54,8 @@ const webVideoSelectColumns = `
 const videoHotScoreExpression = `
 	COALESCE(vi.play_count, 0) * 1 +
 	COALESCE(vi.like_count, 0) * 5 +
+	COALESCE(vi.collect_count, 0) * 5 +
+	COALESCE(vi.coin_count, 0) * 6 +
 	COALESCE(vi.comment_count, 0) * 8
 `
 
@@ -191,6 +193,8 @@ func (r *VideoRepository) ListVideoHotMetricSnapshots(ctx context.Context, offse
 			vi.video_id,
 			COALESCE(vi.play_count, 0) AS play_count,
 			COALESCE(vi.like_count, 0) AS like_count,
+			COALESCE(vi.collect_count, 0) AS collect_count,
+			COALESCE(vi.coin_count, 0) AS coin_count,
 			COALESCE(vi.comment_count, 0) AS comment_count
 		`).
 		Order("vi.video_id asc").

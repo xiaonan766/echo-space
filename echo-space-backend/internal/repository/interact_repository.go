@@ -584,7 +584,12 @@ func (r *InteractRepository) SaveUserAction(ctx context.Context, action domain.U
 			change.VideoCountDelta = changeCount
 			return nil
 		case 4:
-			return saveVideoCoinAction(tx, action, existingAction)
+			changeCount, err := saveVideoCoinAction(tx, action, existingAction)
+			if err != nil {
+				return err
+			}
+			change.VideoCountDelta = changeCount
+			return nil
 		case 0, 1:
 			return saveCommentToggleAction(tx, action, existingAction)
 		default:
@@ -717,22 +722,22 @@ func saveVideoToggleAction(tx *gorm.DB, action domain.UserAction, existingAction
 	return changeCount, updateVideoCount(tx, action.VideoID, field, changeCount)
 }
 
-func saveVideoCoinAction(tx *gorm.DB, action domain.UserAction, existingAction *domain.UserAction) error {
+func saveVideoCoinAction(tx *gorm.DB, action domain.UserAction, existingAction *domain.UserAction) (int, error) {
 	if action.VideoUserID == action.UserID {
-		return ErrUserActionSelfCoin
+		return 0, ErrUserActionSelfCoin
 	}
 	if existingAction != nil {
-		return ErrUserActionCoinUsed
+		return 0, ErrUserActionCoinUsed
 	}
 
 	result := tx.Table("user_info").
 		Where("user_id = ? AND current_coin_count >= ?", action.UserID, action.ActionCount).
 		Update("current_coin_count", gorm.Expr("current_coin_count - ?", action.ActionCount))
 	if result.Error != nil {
-		return result.Error
+		return 0, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return ErrUserActionInsufficientCoin
+		return 0, ErrUserActionInsufficientCoin
 	}
 
 	result = tx.Table("user_info").
@@ -742,16 +747,16 @@ func saveVideoCoinAction(tx *gorm.DB, action domain.UserAction, existingAction *
 			"total_coin_count":   gorm.Expr("total_coin_count + ?", action.ActionCount),
 		})
 	if result.Error != nil {
-		return result.Error
+		return 0, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return ErrUserActionCoinFailed
+		return 0, ErrUserActionCoinFailed
 	}
 
 	if err := tx.Create(&action).Error; err != nil {
-		return err
+		return 0, err
 	}
-	return updateVideoCount(tx, action.VideoID, "coin_count", action.ActionCount)
+	return action.ActionCount, updateVideoCount(tx, action.VideoID, "coin_count", action.ActionCount)
 }
 
 func saveCommentToggleAction(tx *gorm.DB, action domain.UserAction, existingAction *domain.UserAction) error {

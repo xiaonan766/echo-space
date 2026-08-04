@@ -37,8 +37,10 @@ end
 
 local playCount = redis.call("HGET", metricsKey, "playCount") or "0"
 local likeCount = redis.call("HGET", metricsKey, "likeCount") or "0"
+local collectCount = redis.call("HGET", metricsKey, "collectCount") or "0"
+local coinCount = redis.call("HGET", metricsKey, "coinCount") or "0"
 local commentCount = redis.call("HGET", metricsKey, "commentCount") or "0"
-return {playCount, likeCount, commentCount}
+return {playCount, likeCount, collectCount, coinCount, commentCount}
 `
 
 type VideoHotStore struct {
@@ -127,6 +129,8 @@ func (s *VideoHotStore) SetMetrics(ctx context.Context, metrics domain.VideoHotM
 	return s.redis.HSet(ctx, s.metricsKey(metrics.VideoID), map[string]any{
 		"playCount":    metrics.PlayCount,
 		"likeCount":    metrics.LikeCount,
+		"collectCount": metrics.CollectCount,
+		"coinCount":    metrics.CoinCount,
 		"commentCount": metrics.CommentCount,
 	}).Err()
 }
@@ -135,7 +139,7 @@ func (s *VideoHotStore) GetMetrics(ctx context.Context, videoID string) (domain.
 	if s == nil || s.redis == nil {
 		return domain.VideoHotMetrics{VideoID: videoID}, nil
 	}
-	values, err := s.redis.HMGet(ctx, s.metricsKey(videoID), "playCount", "likeCount", "commentCount").Result()
+	values, err := s.redis.HMGet(ctx, s.metricsKey(videoID), "playCount", "likeCount", "collectCount", "coinCount", "commentCount").Result()
 	if err != nil {
 		return domain.VideoHotMetrics{}, err
 	}
@@ -218,6 +222,10 @@ func videoHotMetricField(eventType string) (string, bool) {
 		return "playCount", true
 	case domain.VideoHotMetricEventLike:
 		return "likeCount", true
+	case domain.VideoHotMetricEventCollect:
+		return "collectCount", true
+	case domain.VideoHotMetricEventCoin:
+		return "coinCount", true
 	case domain.VideoHotMetricEventComment:
 		return "commentCount", true
 	default:
@@ -235,7 +243,7 @@ func parseVideoHotMetrics(videoID string, result any) (domain.VideoHotMetrics, e
 
 func parseVideoHotMetricValues(videoID string, values []any) (domain.VideoHotMetrics, error) {
 	metrics := domain.VideoHotMetrics{VideoID: strings.TrimSpace(videoID)}
-	if len(values) != 3 {
+	if len(values) != 5 {
 		return metrics, fmt.Errorf("unexpected video hot metric value count %d", len(values))
 	}
 	var err error
@@ -247,7 +255,15 @@ func parseVideoHotMetricValues(videoID string, values []any) (domain.VideoHotMet
 	if err != nil {
 		return metrics, err
 	}
-	metrics.CommentCount, err = parseOptionalRedisInt(values[2])
+	metrics.CollectCount, err = parseOptionalRedisInt(values[2])
+	if err != nil {
+		return metrics, err
+	}
+	metrics.CoinCount, err = parseOptionalRedisInt(values[3])
+	if err != nil {
+		return metrics, err
+	}
+	metrics.CommentCount, err = parseOptionalRedisInt(values[4])
 	if err != nil {
 		return metrics, err
 	}
@@ -268,6 +284,12 @@ func normalizeVideoHotMetrics(metrics domain.VideoHotMetrics) domain.VideoHotMet
 	}
 	if metrics.LikeCount < 0 {
 		metrics.LikeCount = 0
+	}
+	if metrics.CollectCount < 0 {
+		metrics.CollectCount = 0
+	}
+	if metrics.CoinCount < 0 {
+		metrics.CoinCount = 0
 	}
 	if metrics.CommentCount < 0 {
 		metrics.CommentCount = 0

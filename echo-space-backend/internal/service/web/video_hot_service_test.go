@@ -11,10 +11,12 @@ func TestCalculateVideoHeatScore(t *testing.T) {
 		VideoID:      "Abc123Def4",
 		PlayCount:    10,
 		LikeCount:    3,
+		CollectCount: 4,
+		CoinCount:    2,
 		CommentCount: 2,
 	})
-	if score != 41 {
-		t.Fatalf("heat score = %d, want %d", score, 41)
+	if score != 73 {
+		t.Fatalf("heat score = %d, want %d", score, 73)
 	}
 }
 
@@ -46,5 +48,17 @@ func TestValidateVideoHotMetricEvent(t *testing.T) {
 	event.EventType = "bad"
 	if err := validateVideoHotMetricEvent(event); err == nil {
 		t.Fatal("expected unsupported event type error")
+	}
+
+	event.EventType = domain.VideoHotMetricEventCollect
+	event.Delta = -1
+	if err := validateVideoHotMetricEvent(event); err != nil {
+		t.Fatalf("collect cancel event returned error: %v", err)
+	}
+
+	event.EventType = domain.VideoHotMetricEventCoin
+	event.Delta = 0
+	if err := validateVideoHotMetricEvent(event); err == nil {
+		t.Fatal("expected coin delta error")
 	}
 }
